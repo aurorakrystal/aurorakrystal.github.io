@@ -16,49 +16,108 @@
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
       import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-      // 注意：這裡需要填入你的 Firebase Config 才能真的送出資料
-      // 如果還沒設定，占卜功能還是能玩 (只是不會存到後台)
-      window.firebaseModules = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, addDoc };
+
+      // 🔴 你的專屬 Firebase 設定 🔴
+      const firebaseConfig = {
+        apiKey: "AIzaSyDDw0shurk51NfB9R7m4GOepxIGzar18sA",
+        authDomain: "aurora-krystal.firebaseapp.com",
+        projectId: "aurora-krystal",
+        storageBucket: "aurora-krystal.firebasestorage.app",
+        messagingSenderId: "65848777880",
+        appId: "1:65848777880:web:ad2e205f55d362a90704ed",
+        measurementId: "G-FZ3T4DJ34D"
+      };
+
+      // 初始化 Firebase
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+
+      // 自動匿名登入 (確保使用者有權限寫入資料庫)
+      signInAnonymously(auth)
+        .then(() => {
+            console.log("Firebase: 訪客連線成功");
+        })
+        .catch((error) => {
+            console.error("Firebase 連線失敗:", error);
+        });
+
+      // 定義一個全域函數讓 React 可以呼叫
+      window.saveToFirebase = async (data) => {
+        try {
+          // 寫入 'customer_leads' 集合
+          const docRef = await addDoc(collection(db, "customer_leads"), {
+            ...data,
+            timestamp: new Date().toISOString(), // 紀錄時間
+            source: "tarot_web_app" // 標記來源
+          });
+          console.log("資料已儲存, ID: ", docRef.id);
+          return true;
+        } catch (e) {
+          console.error("儲存失敗: ", e);
+          throw e;
+        }
+      };
     </script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
         body { font-family: 'Noto Sans TC', sans-serif; }
         h1, h2, h3, h4, .font-serif { font-family: 'Noto Serif TC', serif; }
+        
+        /* 動畫設定 */
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+        .animate-twinkle { animation: twinkle 3s infinite ease-in-out; }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
+        .animate-fade-in-down { animation: fadeInDown 0.5s ease-out forwards; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        
+        .double-border {
+          box-shadow: 
+            0 0 0 4px rgba(255,255,255,0.2),
+            0 0 0 8px rgba(139, 92, 246, 0.1);
+        }
     </style>
 </head>
-<body>
+<body class="bg-slate-50">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
-        
-        // --- Firebase 設定區 (請填入你的設定，若無則模擬成功) ---
-        const firebaseConfig = {
-            // apiKey: "...",
-            // authDomain: "...",
-            // ...
-        };
 
-        // 模擬 Firebase (如果沒有 Config)
-        const mockFirebase = {
-            auth: {},
-            db: {},
-            signIn: async () => console.log("Simulated Sign In"),
-            addDoc: async () => {
-                console.log("Simulated Data Save");
-                return new Promise(resolve => setTimeout(resolve, 1000));
-            }
-        };
-
-        // --- 圖示元件定義 ---
+        // --- 圖示元件 (手動定義 SVG) ---
         const Icon = ({ d, size = 24, className = "", strokeWidth = 2, fill = "none" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {Array.isArray(d) ? d.map((path, i) => <path key={i} d={path} />) : <path d={d} />}
             </svg>
         );
 
-        // --- 完整圖示集 (30+ Icons) ---
+        // --- 完整圖示集 ---
         const Icons = {
             Sparkles: (p) => <Icon d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z" {...p} />,
             RefreshCw: (p) => <Icon d={["M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16", "M16 21h5v-5"]} {...p} />,
@@ -71,7 +130,7 @@
             ArrowUp: (p) => <Icon d="M12 19V5M5 12l7-7 7 7" {...p} />,
             Crown: (p) => <Icon d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" {...p} />,
             Sun: (p) => <Icon d={["M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42", "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"]} {...p} />,
-            Coins: (p) => <Icon d={["M10.13 2H22v20H2V6l4.13-4z", "M6 12h12", "M6 16h12"]} {...p} />, // Placeholder for Coins
+            Coins: (p) => <Icon d={["M10.13 2H22v20H2V6l4.13-4z", "M6 12h12", "M6 16h12"]} {...p} />, 
             Heart: (p) => <Icon d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" {...p} />,
             Shield: (p) => <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...p} />,
             Gem: (p) => <Icon d="M6 3h12l4 6-10 13L2 9Z" {...p} />,
@@ -84,11 +143,11 @@
             Flame: (p) => <Icon d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.6-3.2 1.079.8 2.222 1.556 2.9 2.7z" {...p} />,
             Cloud: (p) => <Icon d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" {...p} />,
             Wind: (p) => <Icon d={["M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"]} {...p} />,
-            Ghost: (p) => <Icon d="M9 22l1-6.5-2.5-1L12 3l6 9h-2.5L18 22z" {...p} />, // Placeholder
+            Ghost: (p) => <Icon d="M9 22l1-6.5-2.5-1L12 3l6 9h-2.5L18 22z" {...p} />,
             Anchor: (p) => <Icon d="M12 22a7 7 0 0 0 7-7h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 7 7zm0-20v15m0-10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" {...p} />,
             Feather: (p) => <Icon d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5zM16 8L2 22M17.5 15H9" {...p} />,
             Gift: (p) => <Icon d={["M20 12v10H4V12", "M2 7h20v5H2z", "M12 22V7", "M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z", "M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"]} {...p} />,
-            Briefcase: (p) => <Icon d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" {...p} />, // Placeholder for User
+            Briefcase: (p) => <Icon d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" {...p} />,
             Lock: (p) => <Icon d="M7 11V7a5 5 0 0 1 10 0v4m-12 0h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z" {...p} />,
             Clock: (p) => <Icon d="M12 6v6l4 2 M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" {...p} />,
             Hash: (p) => <Icon d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" {...p} />,
@@ -118,7 +177,7 @@
           default: <Icons.Star size={56} strokeWidth={1.5} />
         };
 
-        // ... 資料定義 (保持不變) ...
+        // ... 主星 14 張 ...
         const mainStarsData = [
           { id: 'ziwei', name: '紫微', upright: { keyword: '領導統御、尊貴', desc: '【亮】如皇帝般尊貴，具備強大的統籌能力與理性。能納百川，地位崇高，展現出大氣與穩重的領袖風範。', advice: '展現你的霸氣與理性，現在是統籌大局、發號施令的最佳時刻，眾人皆會服從。' }, reversed: { keyword: '孤傲任性、疑心', desc: '【暗】如同昏君，喜惡隨心，過度在意面子與排場。疑心病重，聽不進諫言，容易因錯誤的權力使用而陷入孤獨。', advice: '放下無謂的面子與疑心，不要一意孤行。你的任性可能會導致權力失衡或人際孤立。' }, element: '土' },
           { id: 'tianfu', name: '天府', upright: { keyword: '穩健管理、格局', desc: '【亮】如王爺般掌管財庫，具備優秀的管理能力與號召力。行事穩健瀟灑，能屈能伸，擁有廣大的發展平台。', advice: '採取穩紮穩打的策略，利用現有的資源與平台進行管理，保守謹慎會帶來長遠利益。' }, reversed: { keyword: '保守怯弱、計較', desc: '【暗】過度保守導致缺乏創新，心高氣傲卻又膽小怕事。容易在金錢上過於計較（摳門），或在關鍵時刻缺乏責任感。', advice: '不要太過斤斤計較或逃避責任，試著打破保守的心態，過度謹慎只會讓你錯失良機。' }, element: '土' },
@@ -136,6 +195,7 @@
           { id: 'pojun', name: '破軍', upright: { keyword: '突破創新、先鋒', desc: '【亮】耗星，不破不立。具備強大的破壞與建設力，適合推翻舊制，開創全新的局面。', advice: '大膽創新，打破舊有的框架！現在不是守成的時候，徹底的改變才能帶來生機。' }, reversed: { keyword: '盲目破壞、損耗', desc: '【暗】破壞力失控，為了改變而改變，導致資源耗盡。六親緣薄，行事魯莽不計後果。', advice: '不要盲目破壞，注意資源的消耗。在改變之前先評估代價，避免造成不可挽回的損失。' }, element: '水' }
         ];
 
+        // ... 輔牌 18 張 ...
         const auxStarsData = [
           { id: 'wenchang', name: '文昌', type: 'lucky', keyword: '正統文書、理性', desc: '吉星。代表正統學術、文書契約、SOP、理性溝通。', advice: '善用白紙黑字的契約保障權益，溝通時保持理性與邏輯。' },
           { id: 'wenqu', name: '文曲', type: 'lucky', keyword: '感性才華、口才', desc: '吉星。代表感性、藝術才華、口才表達、非正統途徑、桃花。', advice: '發揮你的創意、直覺與個人魅力，用感性去打動人心。' },
@@ -157,6 +217,7 @@
           { id: 'huaji', name: '化忌', type: 'unlucky', keyword: '遺憾、虧欠', desc: '煞星。代表虧欠、遺憾、空缺、是非、不順。前世的債，今生的劫。', advice: '面對生命中的不圓滿，視為還債與修行的過程，低調忍耐。' }
         ];
 
+        // ... 十二長生 12 張 ...
         const twelveStagesData = [
           { name: '長生', keyword: '萌芽、起始', desc: '新的開始，生機勃勃，源源不絕。', time: '寅時 (03-05點)', num: 1, energy: '⭐️⭐️⭐️⭐️' },
           { name: '沐浴', keyword: '不穩、桃花', desc: '桃花敗地，喜新厭舊，不穩定。', time: '卯時 (05-07點)', num: 2, energy: '⭐️⭐️' },
@@ -433,14 +494,29 @@
 
             setIsSubmitting(true);
 
-            // 模擬資料送出
-            setTimeout(() => {
-                setIsSubmitting(false);
-                setStep('drawing');
-                setSelections({ main: null, aux: null, extraAux: null, stage: null });
-                initPhase('main');
-                showToast("資料已送出，正在洗牌...", 'success');
-            }, 1000);
+            // 呼叫 Firebase 儲存函式
+            try {
+                if (window.saveToFirebase) {
+                    await window.saveToFirebase({
+                        name,
+                        email,
+                        question
+                    });
+                    showToast("資料已送出，正在洗牌...", 'success');
+                } else {
+                    console.warn("Firebase not ready, running in demo mode.");
+                    await new Promise(r => setTimeout(r, 1000));
+                    showToast("演示模式：開始占卜", 'success');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("連線異常，將直接進入占卜", 'success');
+            }
+
+            setIsSubmitting(false);
+            setStep('drawing');
+            setSelections({ main: null, aux: null, extraAux: null, stage: null });
+            initPhase('main');
           };
 
           const handleCardClick = (index) => {
