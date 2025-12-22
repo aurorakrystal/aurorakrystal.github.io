@@ -1,1069 +1,937 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Sparkles, RefreshCw, Moon, Star, BookOpen, ChevronRight, MessageCircle, 
-  ArrowDown, ArrowUp, Crown, Sun, Coins, Heart, Shield, Gem, Mic, 
-  Scale, Umbrella, Sword, Hammer, Brain, Flame, Cloud, Wind, Zap, Ghost,
-  Anchor, Feather, Gift, Briefcase, Lock, Clock, Hash, User, Mail, Send, Loader2, XCircle, FileText
-} from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
-
-// --- Firebase 初始化 ---
-// 請記得在 CodeSandbox 或您的專案中替換成您的真實 Firebase Config
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'); 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'ziling-divination';
-
-// --- 資料庫定義 ---
-
-const starIcons = {
-  ziwei: <Crown size={56} strokeWidth={1.5} />,
-  tianji: <Brain size={56} strokeWidth={1.5} />,
-  taiyang: <Sun size={56} strokeWidth={1.5} />,
-  wuqu: <Coins size={56} strokeWidth={1.5} />,
-  tiantong: <Heart size={56} strokeWidth={1.5} />,
-  lianzhen: <Flame size={56} strokeWidth={1.5} />,
-  tianfu: <Shield size={56} strokeWidth={1.5} />,
-  taiyin: <Moon size={56} strokeWidth={1.5} />,
-  tanlang: <Gem size={56} strokeWidth={1.5} />,
-  jumen: <MessageCircle size={56} strokeWidth={1.5} />,
-  tianxiang: <Scale size={56} strokeWidth={1.5} />,
-  tianliang: <Umbrella size={56} strokeWidth={1.5} />,
-  qisha: <Sword size={56} strokeWidth={1.5} />,
-  pojun: <Hammer size={56} strokeWidth={1.5} />,
-  default: <Star size={56} strokeWidth={1.5} />
-};
-
-// 主星 14 張 (依據《星曜亮暗的不同取象》更新)
-const mainStarsData = [
-  { 
-    id: 'ziwei', name: '紫微', 
-    upright: { 
-        keyword: '領導統御、尊貴', 
-        desc: '【亮】如皇帝般尊貴，具備強大的統籌能力與理性。能納百川，地位崇高，展現出大氣與穩重的領袖風範。',
-        advice: '展現你的霸氣與理性，現在是統籌大局、發號施令的最佳時刻，眾人皆會服從。'
-    }, 
-    reversed: { 
-        keyword: '孤傲任性、疑心', 
-        desc: '【暗】如同昏君，喜惡隨心，過度在意面子與排場。疑心病重，聽不進諫言，容易因錯誤的權力使用而陷入孤獨。',
-        advice: '放下無謂的面子與疑心，不要一意孤行。你的任性可能會導致權力失衡或人際孤立。'
-    },
-    element: '土'
-  },
-  { 
-    id: 'tianfu', name: '天府', 
-    upright: { 
-        keyword: '穩健管理、格局', 
-        desc: '【亮】如王爺般掌管財庫，具備優秀的管理能力與號召力。行事穩健瀟灑，能屈能伸，擁有廣大的發展平台。',
-        advice: '採取穩紮穩打的策略，利用現有的資源與平台進行管理，保守謹慎會帶來長遠利益。'
-    }, 
-    reversed: { 
-        keyword: '保守怯弱、計較', 
-        desc: '【暗】過度保守導致缺乏創新，心高氣傲卻又膽小怕事。容易在金錢上過於計較（摳門），或在關鍵時刻缺乏責任感。',
-        advice: '不要太過斤斤計較或逃避責任，試著打破保守的心態，過度謹慎只會讓你錯失良機。'
-    },
-    element: '土'
-  },
-  { 
-    id: 'taiyang', name: '太陽', 
-    upright: { 
-        keyword: '熱情博愛、坦率', 
-        desc: '【亮】如旭日東昇，充滿陽剛之氣與正能量。樂於奉獻，公開透明，容易成為眾人矚目的焦點，名聲顯赫。',
-        advice: '像太陽一樣燃燒自己照亮他人，公開坦率地表達你的想法，你的熱情是解決問題的鑰匙。'
-    }, 
-    reversed: { 
-        keyword: '華而不實、勞碌', 
-        desc: '【暗】雖然搶眼但流於表面（華而不實），容易因過度熱心而招惹是非或多管閒事。不利男性，且有勞而無獲的跡象。',
-        advice: '收斂過度的熱情，避免介入他人的因果。不要為了虛名而讓自己陷入無謂的勞碌與是非中。'
-    },
-    element: '火'
-  },
-  { 
-    id: 'taiyin', name: '太陰', 
-    upright: { 
-        keyword: '細膩溫柔、計劃', 
-        desc: '【亮】如月亮般溫柔，心思細膩且注重細節。擅長規劃與累積（財富或情感），愛乾淨整潔，展現出內斂的美感。',
-        advice: '發揮你的細膩與計劃能力，慢慢累積資源。以柔克剛，溫柔的堅持會帶來豐厚的回報。'
-    }, 
-    reversed: { 
-        keyword: '情緒氾濫、潔癖', 
-        desc: '【暗】內心自卑且缺乏安全感，容易多愁善感或過度潔癖（龜毛）。意志力薄弱，處理事情太過緩慢且無主見。',
-        advice: '不要被情緒勒索，也不要陷入無止盡的細節糾結。建立自信，勇敢做出決定，別讓不安感主導你。'
-    },
-    element: '水'
-  },
-  { 
-    id: 'wuqu', name: '武曲', 
-    upright: { 
-        keyword: '剛毅果決、執行', 
-        desc: '【亮】如剛毅之將，執行力極強，不畏挫折與吃苦。在金錢與金融方面運勢極佳，做事果斷負責，能獨立完成任務。',
-        advice: '現在是展現「硬實力」的時候。快刀斬亂麻，直接切入核心利益，不要拖泥帶水。'
-    }, 
-    reversed: { 
-        keyword: '固執短慮、寡情', 
-        desc: '【暗】過度剛硬導致不通人情，倔強固執。容易變成守財奴，視野短淺（短慮），在人際與家庭關係上較為淡薄孤剋。',
-        advice: '不要為了錢財或原則而傷了感情。試著柔軟一些，太過固執己見只會讓你陷入孤立無援。'
-    },
-    element: '金'
-  },
-  { 
-    id: 'tianxiang', name: '天相', 
-    upright: { 
-        keyword: '溝通協調、周全', 
-        desc: '【亮】如宰相輔政，斯文有禮且思慮周全。擅長溝通協調，重視人際和諧與家庭，能提供強大的輔佐助力。',
-        advice: '善用你的溝通技巧與親和力，扮演協調者的角色。注重外在形象與人和，會為你帶來好運。'
-    }, 
-    reversed: { 
-        keyword: '隨波逐流、吃虧', 
-        desc: '【暗】牆頭草隨風倒，缺乏主見與意志力。容易捲入文書合約的糾紛，或因過度熱心而「好心沒好報」，容易吃虧。',
-        advice: '看清楚合約細節，堅持自己的原則，不要盲目跟隨他人。小心「爛好人」的傾向讓你背黑鍋。'
-    },
-    element: '水'
-  },
-  { 
-    id: 'lianzhen', name: '廉貞', 
-    upright: { 
-        keyword: '自律廉潔、魅力', 
-        desc: '【亮】次桃花星，具備優秀的社交手腕與藝術才華。做事井井有條，公私分明（廉潔），在事業上能展現高度的自律與魅力。',
-        advice: '發揮你的社交魅力與專業度，建立良好的人脈網。自律與條理分明是你成功的關鍵。'
-    }, 
-    reversed: { 
-        keyword: '極端偏執、糾紛', 
-        desc: '【暗】心結難解，容易鑽牛角尖或走極端。需注意法律糾紛、感情爛桃花或意外血光，情緒起伏劇烈。',
-        advice: '解開內心的心結，不要太過偏執。小心處理感情與人際邊界，避免因情緒失控而引發衝突。'
-    },
-    element: '火'
-  },
-  { 
-    id: 'qisha', name: '七殺', 
-    upright: { 
-        keyword: '衝勁十足、開創', 
-        desc: '【亮】如肅殺之將，幹勁十足。敢愛敢恨，追求激情與主導權。有強烈物質慾望，擅長透過冒險、投資等高風險方式獲利。',
-        advice: '拿出魄力與執行力！現在是透過冒險與突破來獲利的時機，但要將這股衝勁轉化為建設性的開創力量。'
-    }, 
-    reversed: { 
-        keyword: '衝動魯莽、挫折', 
-        desc: '【暗】外表衝動內心猶豫，容易意氣用事。想掌控局面卻常引發衝突，適合單打獨鬥但易感孤獨。',
-        advice: '冷靜下來，衝動容易誤事。高風險雖有高回報，但此刻需防範挫折，避免因掌控欲過強而玉石俱焚。'
-    },
-    element: '金'
-  },
-  { 
-    id: 'tianji', name: '天機', 
-    upright: { 
-        keyword: '機智靈活、策略', 
-        desc: '【亮】軍師運籌帷幄，反應靈敏，計畫周詳。善於變動中尋找機會，適合動腦規劃。',
-        advice: '多動腦筋，規劃周全的策略。利用你的靈活反應來應對變化，智取勝於力敵。'
-    }, 
-    reversed: { 
-        keyword: '焦慮算計、自誤', 
-        desc: '【暗】聰明反被聰明誤，思慮過多導致精神焦慮。容易因過度算計或投機心態而招致失敗。',
-        advice: '停止無謂的焦慮與猜疑，讓大腦休息一下。腳踏實地，不要試圖走捷徑或耍小聰明。'
-    },
-    element: '木'
-  },
-  { 
-    id: 'tiantong', name: '天同', 
-    upright: { 
-        keyword: '福氣隨緣、享受', 
-        desc: '【亮】福星高照，保有赤子之心。重視心靈交流與生活品質，適合穩定、固定的發展模式。',
-        advice: '保持樂觀，善用親和力與適應性。對於金錢與感情不妨隨性一些，福氣自然會來。'
-    }, 
-    reversed: { 
-        keyword: '懶散依賴、逃避', 
-        desc: '【暗】過於安逸導致失去動力，遇困難傾向逃避。容易依賴伴侶或外援，怕受傷而退縮。',
-        advice: '不要再逃避現實了，過度依賴只會讓你停滯不前。需在安逸中尋找動力，培養獨立面對問題的勇氣。'
-    },
-    element: '水'
-  },
-  { 
-    id: 'tanlang', name: '貪狼', 
-    upright: { 
-        keyword: '八面玲瓏、多藝', 
-        desc: '【亮】慾望之神，八面玲瓏，學習力與適應力強。在社交場合如魚得水，充滿機會與吸引力。',
-        advice: '積極展現你的才華與魅力，多參加社交活動。你的慾望是你前進的動力，去爭取吧！'
-    }, 
-    reversed: { 
-        keyword: '貪慾失控、虛浮', 
-        desc: '【暗】慾望失控，容易沈迷於不良嗜好或肉慾。投機心態重，容易招惹爛桃花或因小失大。',
-        advice: '克制過度的貪念與慾望，腳踏實地。小心桃色糾紛與投機陷阱，以免身敗名裂。'
-    },
-    element: '木/水'
-  },
-  { 
-    id: 'jumen', name: '巨門', 
-    upright: { 
-        keyword: '能言善道、洞察', 
-        desc: '【亮】觀察力敏銳，能洞察人心與黑暗面。口才極佳，善於深思與研究，能挖掘事物的核心。',
-        advice: '善用你的口才與分析能力，深入溝通。你的洞察力能幫你看穿真相，解決複雜問題。'
-    }, 
-    reversed: { 
-        keyword: '口舌是非、多疑', 
-        desc: '【暗】禍從口出，容易引發口舌是非。內心陰暗多疑，容易誤解他人或被他人誤解，人際關係緊張。',
-        advice: '少說多做，謹言慎行。調整負面思考的習慣，不要總是往壞處想，避免捲入八卦。'
-    },
-    element: '水'
-  },
-  { 
-    id: 'tianliang', name: '天梁', 
-    upright: { 
-        keyword: '成熟蔭庇、解厄', 
-        desc: '【亮】老人星，成熟穩重，講求原則。能逢凶化吉，具有照顧他人的責任感與長輩緣。',
-        advice: '堅持你的原則與正義感，尋求長輩的建議。扮演照顧者的角色，助人即是助己。'
-    }, 
-    reversed: { 
-        keyword: '老氣橫秋、固執', 
-        desc: '【暗】過於說教讓人厭煩，倚老賣老。固執己見，過度挑剔細節，容易陷入人際孤立。',
-        advice: '放下身段，不要太愛說教。多傾聽他人的意見，太過固執只會讓你變得孤獨。'
-    },
-    element: '土'
-  },
-  { 
-    id: 'pojun', name: '破軍', 
-    upright: { 
-        keyword: '突破創新、先鋒', 
-        desc: '【亮】耗星，不破不立。具備強大的破壞與建設力，適合推翻舊制，開創全新的局面。',
-        advice: '大膽創新，打破舊有的框架！現在不是守成的時候，徹底的改變才能帶來生機。'
-    }, 
-    reversed: { 
-        keyword: '盲目破壞、損耗', 
-        desc: '【暗】破壞力失控，為了改變而改變，導致資源耗盡。六親緣薄，行事魯莽不計後果。',
-        advice: '不要盲目破壞，注意資源的消耗。在改變之前先評估代價，避免造成不可挽回的損失。'
-    },
-    element: '水'
-  }
-];
-
-// 輔牌 18 張
-const auxStarsData = [
-  { id: 'wenchang', name: '文昌', type: 'lucky', keyword: '正統文書、理性', desc: '吉星。代表正統學術、文書契約、SOP、理性溝通。', advice: '善用白紙黑字的契約保障權益，溝通時保持理性與邏輯。' },
-  { id: 'wenqu', name: '文曲', type: 'lucky', keyword: '感性才華、口才', desc: '吉星。代表感性、藝術才華、口才表達、非正統途徑、桃花。', advice: '發揮你的創意、直覺與個人魅力，用感性去打動人心。' },
-  { id: 'zuofu', name: '左輔', type: 'lucky', keyword: '男平輩、明助力', desc: '吉星。代表「男性」平輩或晚輩的助力，屬於「明面」上的具體幫助（如出錢出力）。', advice: '尋求男性同事、朋友或合作夥伴的具體協助，團結力量大。' },
-  { id: 'youbi', name: '右弼', type: 'lucky', keyword: '女平輩、暗支持', desc: '吉星。代表「女性」平輩或晚輩的助力，屬於「隱性」的精神支持或私下協調。', advice: '留意女性友人的建議，或尋求私下的溝通協調與精神支持。' },
-  { id: 'tiankui', name: '天魁', type: 'lucky', keyword: '男長輩、明提拔', desc: '吉星。代表「男性」長輩或上司的提拔，屬於「明面」的機會與貴人。', advice: '多向男性長輩或主管請益，展現你的能力，機會就在眼前。' },
-  { id: 'tianyue', name: '天鉞', type: 'lucky', keyword: '女長輩、暗關照', desc: '吉星。代表「女性」長輩或上司的關照，屬於「暗中」的機會與貴人。', advice: '留意女性長輩的提點，或私下給予的機會，保持謙虛。' },
-  { id: 'qingyang', name: '擎羊', type: 'unlucky', keyword: '衝動、一刀切', desc: '煞星。代表「快」、衝動、競爭、衝突、一刀兩斷。執行力強但過於尖銳，易受傷。', advice: '做事果斷是好事，但要避免魯莽與人發生正面衝突，注意受傷與血光。' },
-  { id: 'tuoluo', name: '陀羅', type: 'unlucky', keyword: '拖延、糾結', desc: '煞星。代表「慢」、拖延、糾結、原地打轉、蹉跎歲月。像陀螺一樣轉個不停，進度停滯。', advice: '事情會卡住或拖延一陣子，陷入迴圈。需要極大的耐心去釐清糾結的點，切勿鑽牛角尖。' },
-  { id: 'huoxing', name: '火星', type: 'unlucky', keyword: '明火、暴脾氣', desc: '煞星。代表爆發、明火、暴脾氣、突發狀況。來得快去得快，像火山爆發。', advice: '控制情緒，小心突發的意外或爭執，速戰速決，不要泥泥帶水。' },
-  { id: 'lingxing', name: '鈴星', type: 'unlucky', keyword: '暗火、冷戰', desc: '煞星。代表隱忍、暗火、冷戰、精算。像悶燒鍋一樣，把不滿記在心裡。', advice: '有話直說，不要悶在心裡生悶氣或搞冷戰，以免造成內傷。' },
-  { id: 'dikong', name: '地空', type: 'unlucky', keyword: '精神空虛、幻想', desc: '煞星。代表精神上的空虛、幻想、不務實、得而復失。天馬行空但缺乏執行。', advice: '適合從事創意、玄學或精神層面的思考，不適合具體的金錢投資。' },
-  { id: 'dijie', name: '地劫', type: 'unlucky', keyword: '物質損失、動盪', desc: '煞星。代表物質上的損失、波動、半路攔截。像浪裡行舟，風險極大。', advice: '局勢動盪不安，請看緊荷包，保守行事，避免冒險投資。' },
-  { id: 'lucun', name: '祿存', type: 'lucky', keyword: '天財、保守', desc: '吉星。代表天得之財、儲蓄、謹慎保守。雖然有錢但容易孤獨（羊陀夾祿）。', advice: '採取保守穩健的理財策略，積穀防饑，不要隨意變動。' },
-  { id: 'tianma', name: '天馬', type: 'special', keyword: '變動、奔波', desc: '中性星。代表變動、奔波、遠行、忙碌。動起來才有財（祿馬交馳）。', advice: '不適合靜守，必須動起來！出差、旅遊或改變現狀會帶來轉機。' },
-  { id: 'hualu', name: '化祿', type: 'lucky', keyword: '緣分、愉悅', desc: '吉星。代表緣分增加、愉悅、享受、順利、財祿。人際關係的潤滑劑。', advice: '現在是廣結善緣、享受成果的好時機，保持愉快的心情。' },
-  { id: 'huaquan', name: '化權', type: 'neutral', keyword: '權力、掌控', desc: '中性星。代表掌權、控制欲、競爭、強勢、行動力。想要主導一切。', advice: '積極爭取主導權，展現你的專業與強勢，但要小心人際摩擦。' },
-  { id: 'huake', name: '化科', type: 'lucky', keyword: '名聲、科甲', desc: '吉星。代表名聲、科甲、面子、學術表現、貴人解厄。重視外在形象。', advice: '愛惜羽毛，建立良好的名聲與形象，有利於考試或升遷。' },
-  { id: 'huaji', name: '化忌', type: 'unlucky', keyword: '遺憾、虧欠', desc: '煞星。代表虧欠、遺憾、空缺、是非、不順。前世的債，今生的劫。', advice: '面對生命中的不圓滿，視為還債與修行的過程，低調忍耐。' }
-];
-
-// 十二長生 12 張
-const twelveStagesData = [
-  { name: '長生', keyword: '萌芽、起始', desc: '新的開始，生機勃勃，源源不絕。', time: '寅時 (03-05點)', num: 1, energy: '⭐️⭐️⭐️⭐️' },
-  { name: '沐浴', keyword: '不穩、桃花', desc: '桃花敗地，喜新厭舊，不穩定。', time: '卯時 (05-07點)', num: 2, energy: '⭐️⭐️' },
-  { name: '冠帶', keyword: '成長、包裝', desc: '穿衣戴帽，注重外表，小有成就。', time: '辰時 (07-09點)', num: 3, energy: '⭐️⭐️⭐️' },
-  { name: '臨官', keyword: '正式、展現', desc: '正式任職，努力工作，薪資增長。', time: '巳時 (09-11點)', num: 4, energy: '⭐️⭐️⭐️⭐️' },
-  { name: '帝旺', keyword: '頂峰、極致', desc: '運勢頂峰，氣勢強盛，唯我獨尊。', time: '午時 (11-13點)', num: 5, energy: '⭐️⭐️⭐️⭐️⭐️' },
-  { name: '衰', keyword: '衰退、守成', desc: '盛極而衰，轉攻為守，氣勢減弱。', time: '未時 (13-15點)', num: 6, energy: '⭐️⭐️⭐️' },
-  { name: '病', keyword: '漏洞、無力', desc: '能量不足，漏洞出現，心有餘力不足。', time: '申時 (15-17點)', num: 7, energy: '⭐️⭐️' },
-  { name: '死', keyword: '靜止、停滯', desc: '靜止不動，缺乏生氣，鑽牛角尖。', time: '酉時 (17-19點)', num: 8, energy: '⭐️' },
-  { name: '墓', keyword: '收藏、被動', desc: '收藏積累，陷入被動，資源被鎖住。', time: '戌時 (19-21點)', num: 9, energy: '⭐️⭐️' },
-  { name: '絕', keyword: '斷絕、谷底', desc: '完全斷絕，跌入谷底，絕處逢生。', time: '亥時 (21-23點)', num: 10, energy: '⭐️' },
-  { name: '胎', keyword: '孕育、規劃', desc: '重新孕育，希望萌芽，尚未成形。', time: '子時 (23-01點)', num: 11, energy: '⭐️⭐️' },
-  { name: '養', keyword: '休養、等待', desc: '休養生息，等待時機，接受呵護。', time: '丑時 (01-03點)', num: 12, energy: '⭐️⭐️⭐️' }
-];
-
-// --- 邏輯工具 ---
-const shuffleArray = (array) => {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-};
-
-// --- 元件 ---
-
-const StarryBackground = () => (
-  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-    <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-purple-100">
-       <div className="absolute top-0 left-0 w-full h-full opacity-40 bg-[radial-gradient(circle_at_50%_50%,_#e9d5ff_0%,_transparent_60%)]"></div>
-       <div className="absolute bottom-0 right-0 w-full h-full opacity-30 bg-[radial-gradient(circle_at_80%_80%,_#fbcfe8_0%,_transparent_50%)]"></div>
-    </div>
-    {[...Array(60)].map((_, i) => (
-      <div 
-        key={i}
-        className="absolute rounded-full bg-purple-300 opacity-60 animate-twinkle"
-        style={{
-          top: `${Math.random() * 100}%`,
-          left: `${Math.random() * 100}%`,
-          width: `${Math.random() * 3 + 1}px`, 
-          height: `${Math.random() * 3 + 1}px`,
-          animationDelay: `${Math.random() * 5}s`,
-          animationDuration: `${Math.random() * 3 + 2}s`
-        }}
-      />
-    ))}
-  </div>
-);
-
-const Toast = ({ message, type, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  if (!message) return null;
-
-  const bgClass = type === 'error' ? 'bg-red-500' : 'bg-green-500';
-
-  return (
-    <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg text-white flex items-center gap-2 ${bgClass} animate-fade-in-down transition-all`}>
-      {type === 'error' ? <XCircle size={20}/> : <Sparkles size={20}/>}
-      <span className="font-medium text-sm">{message}</span>
-    </div>
-  );
-};
-
-// 裝飾性圖騰元件
-const DecorationPattern = ({ className }) => (
-  <svg className={className} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M50 0C50 0 60 20 80 20C60 20 50 40 50 40C50 40 40 20 20 20C40 20 50 0 50 0Z" fill="currentColor" opacity="0.6"/>
-    <path d="M50 100C50 100 60 80 80 80C60 80 50 60 50 60C50 60 40 80 20 80C40 80 50 100 50 100Z" fill="currentColor" opacity="0.6"/>
-    <circle cx="50" cy="50" r="5" fill="currentColor" opacity="0.8"/>
-  </svg>
-);
-
-const Card = ({ title, subtitle, shortDesc, type, id, isRevealed, delay = 0, isReversed = false, colorClass, extraInfo, onClick, isInteractable = false }) => {
-  const [flipped, setFlipped] = useState(false);
-
-  useEffect(() => {
-    if (isRevealed) {
-      const timer = setTimeout(() => setFlipped(true), delay);
-      return () => clearTimeout(timer);
-    } else {
-      setFlipped(false);
-    }
-  }, [isRevealed, delay]);
-
-  const contentStyle = isReversed 
-    ? "bg-gradient-to-b from-slate-100 to-slate-300 text-slate-700" 
-    : "bg-gradient-to-b from-purple-50 to-white text-purple-900";   
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小歐紫靈牌 | 線上占卜</title>
     
-  const borderStyle = isReversed ? "border-slate-400" : "border-amber-200";
-  const headerBg = isReversed ? "bg-slate-500" : "bg-purple-600";
-  const headerText = isReversed ? "text-slate-100" : "text-amber-100";
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+      import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+      // 注意：這裡需要填入你的 Firebase Config 才能真的送出資料
+      // 如果還沒設定，占卜功能還是能玩 (只是不會存到後台)
+      window.firebaseModules = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, addDoc };
+    </script>
 
-  const getIcon = () => {
-    if (type === 'main' && id && starIcons[id]) return starIcons[id];
-    if (type === 'aux' && id && starIcons[id]) return starIcons[id];
-    if (type === 'main') return <Star size={56} strokeWidth={1.5} />;
-    if (type === 'aux') return <Sparkles size={48} strokeWidth={1.5} />;
-    if (type === 'stage') return <RefreshCw size={48} strokeWidth={1.5} />;
-    return <Star size={48} strokeWidth={1.5} />;
-  };
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        h1, h2, h3, h4, .font-serif { font-family: 'Noto Serif TC', serif; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-  return (
-    <div 
-      className={`relative w-36 h-60 perspective-1000 m-2 ${isInteractable ? 'cursor-pointer hover:scale-105 transition-transform duration-300' : ''}`}
-      onClick={onClick}
-    >
-      <div className={`relative w-full h-full transition-transform duration-700 transform-style-3d ${flipped ? 'rotate-y-180' : ''}`}>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
         
-        {/* --- Card Back: Mystic Mandala Theme --- */}
-        <div className="absolute w-full h-full rounded-xl backface-hidden flex flex-col items-center justify-center overflow-hidden shadow-2xl border-2 border-purple-400/50 bg-[#1a0b2e]">
-           <div className="absolute inset-0 opacity-30">
-               <svg width="100%" height="100%">
-                  <defs>
-                    <pattern id="mandala" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-                       <circle cx="20" cy="20" r="1" fill="rgba(255,255,255,0.5)"/>
-                       <path d="M20 0 L40 20 L20 40 L0 20 Z" fill="none" stroke="rgba(168,85,247,0.2)" strokeWidth="1"/>
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#mandala)"/>
-               </svg>
-           </div>
-           <div className="absolute w-28 h-28 border border-purple-500/30 rounded-full flex items-center justify-center animate-spin-slow">
-              <div className="w-24 h-24 border border-fuchsia-500/20 rounded-full border-dashed"></div>
-              <div className="w-20 h-20 border border-purple-400/20 rounded-full transform rotate-45"></div>
-           </div>
-           <div className="relative z-10 w-12 h-12 rounded-full bg-gradient-to-br from-purple-800 to-indigo-900 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.9)] border border-purple-300/40">
-             <span className="text-xl text-white font-serif font-bold drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]">紫</span>
-           </div>
-           <DecorationPattern className="absolute top-2 left-2 w-6 h-6 text-purple-500 rotate-45" />
-           <DecorationPattern className="absolute top-2 right-2 w-6 h-6 text-purple-500 -rotate-45" />
-           <DecorationPattern className="absolute bottom-2 left-2 w-6 h-6 text-purple-500 rotate-[135deg]" />
-           <DecorationPattern className="absolute bottom-2 right-2 w-6 h-6 text-purple-500 rotate-[225deg]" />
-        </div>
+        // --- Firebase 設定區 (請填入你的設定，若無則模擬成功) ---
+        const firebaseConfig = {
+            // apiKey: "...",
+            // authDomain: "...",
+            // ...
+        };
 
-        {/* --- Card Front: Tarot Style --- */}
-        <div className={`absolute w-full h-full rounded-xl shadow-xl backface-hidden rotate-y-180 flex flex-col overflow-hidden border-[5px] double-border ${borderStyle} ${contentStyle}`}>
-          
-          <div className="absolute inset-1 border border-current opacity-10 rounded-lg pointer-events-none"></div>
+        // 模擬 Firebase (如果沒有 Config)
+        const mockFirebase = {
+            auth: {},
+            db: {},
+            signIn: async () => console.log("Simulated Sign In"),
+            addDoc: async () => {
+                console.log("Simulated Data Save");
+                return new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        };
 
-          <div className={`h-14 w-full flex flex-col items-center justify-center relative overflow-hidden ${headerBg}`}>
-             <div className="absolute inset-0 bg-black/10"></div>
-             <div className="flex items-center gap-2 relative z-10 w-full justify-center px-1">
-                <DecorationPattern className={`w-4 h-4 ${headerText}`} />
-                <h2 className={`font-serif text-lg font-bold tracking-widest ${headerText}`}>{title}</h2>
-                <DecorationPattern className={`w-4 h-4 ${headerText}`} />
-             </div>
-             
-             <div className={`flex items-center gap-1 text-[10px] font-bold px-3 py-0.5 rounded-full -mb-3 relative z-10 bg-white/90 text-purple-900 shadow-sm`}>
-                {isReversed ? <ArrowDown size={10} className="text-slate-600"/> : <ArrowUp size={10} className="text-purple-600"/>}
-                <span className={isReversed ? "text-slate-700" : "text-purple-800"}>
-                    {type === 'main' ? (isReversed ? '逆位' : '正位') : subtitle}
-                </span>
-             </div>
+        // --- 圖示元件定義 ---
+        const Icon = ({ d, size = 24, className = "", strokeWidth = 2, fill = "none" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {Array.isArray(d) ? d.map((path, i) => <path key={i} d={path} />) : <path d={d} />}
+            </svg>
+        );
+
+        // --- 完整圖示集 (30+ Icons) ---
+        const Icons = {
+            Sparkles: (p) => <Icon d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z" {...p} />,
+            RefreshCw: (p) => <Icon d={["M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16", "M16 21h5v-5"]} {...p} />,
+            Moon: (p) => <Icon d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" {...p} />,
+            Star: (p) => <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" {...p} />,
+            BookOpen: (p) => <Icon d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" {...p} />,
+            ChevronRight: (p) => <Icon d="M9 18l6-6-6-6" {...p} />,
+            MessageCircle: (p) => <Icon d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" {...p} />,
+            ArrowDown: (p) => <Icon d="M12 5v14M19 12l-7 7-7-7" {...p} />,
+            ArrowUp: (p) => <Icon d="M12 19V5M5 12l7-7 7 7" {...p} />,
+            Crown: (p) => <Icon d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" {...p} />,
+            Sun: (p) => <Icon d={["M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42", "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"]} {...p} />,
+            Coins: (p) => <Icon d={["M10.13 2H22v20H2V6l4.13-4z", "M6 12h12", "M6 16h12"]} {...p} />, // Placeholder for Coins
+            Heart: (p) => <Icon d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" {...p} />,
+            Shield: (p) => <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...p} />,
+            Gem: (p) => <Icon d="M6 3h12l4 6-10 13L2 9Z" {...p} />,
+            Mic: (p) => <Icon d={["M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z", "M19 10v2a7 7 0 0 1-14 0v-2", "M12 19v4", "M8 23h8"]} {...p} />,
+            Scale: (p) => <Icon d={["M16 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z", "M2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z", "M7 21h10", "M12 3v18", "M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"]} {...p} />,
+            Umbrella: (p) => <Icon d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7" {...p} />,
+            Sword: (p) => <Icon d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2" {...p} />,
+            Hammer: (p) => <Icon d={["M13.5 17L12 22l-4-3-4 3 1.5-5", "M8.12 12.12L12 16 21.9 6.1a2.12 2.12 0 1 0-3-3L9 13l-.88.88"]} {...p} />,
+            Brain: (p) => <Icon d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" {...p} />,
+            Flame: (p) => <Icon d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.6-3.2 1.079.8 2.222 1.556 2.9 2.7z" {...p} />,
+            Cloud: (p) => <Icon d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" {...p} />,
+            Wind: (p) => <Icon d={["M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"]} {...p} />,
+            Ghost: (p) => <Icon d="M9 22l1-6.5-2.5-1L12 3l6 9h-2.5L18 22z" {...p} />, // Placeholder
+            Anchor: (p) => <Icon d="M12 22a7 7 0 0 0 7-7h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 7 7zm0-20v15m0-10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" {...p} />,
+            Feather: (p) => <Icon d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5zM16 8L2 22M17.5 15H9" {...p} />,
+            Gift: (p) => <Icon d={["M20 12v10H4V12", "M2 7h20v5H2z", "M12 22V7", "M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z", "M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"]} {...p} />,
+            Briefcase: (p) => <Icon d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" {...p} />, // Placeholder for User
+            Lock: (p) => <Icon d="M7 11V7a5 5 0 0 1 10 0v4m-12 0h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z" {...p} />,
+            Clock: (p) => <Icon d="M12 6v6l4 2 M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" {...p} />,
+            Hash: (p) => <Icon d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" {...p} />,
+            User: (p) => <Icon d={["M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2", "M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"]} {...p} />,
+            Mail: (p) => <Icon d={["M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z", "M22 6l-10 7L2 6"]} {...p} />,
+            Send: (p) => <Icon d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" {...p} />,
+            Loader2: (p) => <Icon d="M21 12a9 9 0 1 1-6.219-8.56" className="animate-spin" {...p} />,
+            XCircle: (p) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "M15 9l-6 6M9 9l6 6"]} {...p} />,
+            FileText: (p) => <Icon d={["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M14 2v6h6", "M16 13H8", "M16 17H8", "M10 9H8"]} {...p} />
+        };
+
+        const starIcons = {
+          ziwei: <Icons.Crown size={56} strokeWidth={1.5} />,
+          tianji: <Icons.Brain size={56} strokeWidth={1.5} />,
+          taiyang: <Icons.Sun size={56} strokeWidth={1.5} />,
+          wuqu: <Icons.Coins size={56} strokeWidth={1.5} />,
+          tiantong: <Icons.Heart size={56} strokeWidth={1.5} />,
+          lianzhen: <Icons.Flame size={56} strokeWidth={1.5} />,
+          tianfu: <Icons.Shield size={56} strokeWidth={1.5} />,
+          taiyin: <Icons.Moon size={56} strokeWidth={1.5} />,
+          tanlang: <Icons.Gem size={56} strokeWidth={1.5} />,
+          jumen: <Icons.MessageCircle size={56} strokeWidth={1.5} />,
+          tianxiang: <Icons.Scale size={56} strokeWidth={1.5} />,
+          tianliang: <Icons.Umbrella size={56} strokeWidth={1.5} />,
+          qisha: <Icons.Sword size={56} strokeWidth={1.5} />,
+          pojun: <Icons.Hammer size={56} strokeWidth={1.5} />,
+          default: <Icons.Star size={56} strokeWidth={1.5} />
+        };
+
+        // ... 資料定義 (保持不變) ...
+        const mainStarsData = [
+          { id: 'ziwei', name: '紫微', upright: { keyword: '領導統御、尊貴', desc: '【亮】如皇帝般尊貴，具備強大的統籌能力與理性。能納百川，地位崇高，展現出大氣與穩重的領袖風範。', advice: '展現你的霸氣與理性，現在是統籌大局、發號施令的最佳時刻，眾人皆會服從。' }, reversed: { keyword: '孤傲任性、疑心', desc: '【暗】如同昏君，喜惡隨心，過度在意面子與排場。疑心病重，聽不進諫言，容易因錯誤的權力使用而陷入孤獨。', advice: '放下無謂的面子與疑心，不要一意孤行。你的任性可能會導致權力失衡或人際孤立。' }, element: '土' },
+          { id: 'tianfu', name: '天府', upright: { keyword: '穩健管理、格局', desc: '【亮】如王爺般掌管財庫，具備優秀的管理能力與號召力。行事穩健瀟灑，能屈能伸，擁有廣大的發展平台。', advice: '採取穩紮穩打的策略，利用現有的資源與平台進行管理，保守謹慎會帶來長遠利益。' }, reversed: { keyword: '保守怯弱、計較', desc: '【暗】過度保守導致缺乏創新，心高氣傲卻又膽小怕事。容易在金錢上過於計較（摳門），或在關鍵時刻缺乏責任感。', advice: '不要太過斤斤計較或逃避責任，試著打破保守的心態，過度謹慎只會讓你錯失良機。' }, element: '土' },
+          { id: 'taiyang', name: '太陽', upright: { keyword: '熱情博愛、坦率', desc: '【亮】如旭日東昇，充滿陽剛之氣與正能量。樂於奉獻，公開透明，容易成為眾人矚目的焦點，名聲顯赫。', advice: '像太陽一樣燃燒自己照亮他人，公開坦率地表達你的想法，你的熱情是解決問題的鑰匙。' }, reversed: { keyword: '華而不實、勞碌', desc: '【暗】雖然搶眼但流於表面（華而不實），容易因過度熱心而招惹是非或多管閒事。不利男性，且有勞而無獲的跡象。', advice: '收斂過度的熱情，避免介入他人的因果。不要為了虛名而讓自己陷入無謂的勞碌與是非中。' }, element: '火' },
+          { id: 'taiyin', name: '太陰', upright: { keyword: '細膩溫柔、計劃', desc: '【亮】如月亮般溫柔，心思細膩且注重細節。擅長規劃與累積（財富或情感），愛乾淨整潔，展現出內斂的美感。', advice: '發揮你的細膩與計劃能力，慢慢累積資源。以柔克剛，溫柔的堅持會帶來豐厚的回報。' }, reversed: { keyword: '情緒氾濫、潔癖', desc: '【暗】內心自卑且缺乏安全感，容易多愁善感或過度潔癖（龜毛）。意志力薄弱，處理事情太過緩慢且無主見。', advice: '不要被情緒勒索，也不要陷入無止盡的細節糾結。建立自信，勇敢做出決定，別讓不安感主導你。' }, element: '水' },
+          { id: 'wuqu', name: '武曲', upright: { keyword: '剛毅果決、執行', desc: '【亮】如剛毅之將，執行力極強，不畏挫折與吃苦。在金錢與金融方面運勢極佳，做事果斷負責，能獨立完成任務。', advice: '現在是展現「硬實力」的時候。快刀斬亂麻，直接切入核心利益，不要拖泥帶水。' }, reversed: { keyword: '固執短慮、寡情', desc: '【暗】過度剛硬導致不通人情，倔強固執。容易變成守財奴，視野短淺（短慮），在人際與家庭關係上較為淡薄孤剋。', advice: '不要為了錢財或原則而傷了感情。試著柔軟一些，太過固執己見只會讓你陷入孤立無援。' }, element: '金' },
+          { id: 'tianxiang', name: '天相', upright: { keyword: '溝通協調、周全', desc: '【亮】如宰相輔政，斯文有禮且思慮周全。擅長溝通協調，重視人際和諧與家庭，能提供強大的輔佐助力。', advice: '善用你的溝通技巧與親和力，扮演協調者的角色。注重外在形象與人和，會為你帶來好運。' }, reversed: { keyword: '隨波逐流、吃虧', desc: '【暗】牆頭草隨風倒，缺乏主見與意志力。容易捲入文書合約的糾紛，或因過度熱心而「好心沒好報」，容易吃虧。', advice: '看清楚合約細節，堅持自己的原則，不要盲目跟隨他人。小心「爛好人」的傾向讓你背黑鍋。' }, element: '水' },
+          { id: 'lianzhen', name: '廉貞', upright: { keyword: '自律廉潔、魅力', desc: '【亮】次桃花星，具備優秀的社交手腕與藝術才華。做事井井有條，公私分明（廉潔），在事業上能展現高度的自律與魅力。', advice: '發揮你的社交魅力與專業度，建立良好的人脈網。自律與條理分明是你成功的關鍵。' }, reversed: { keyword: '極端偏執、糾紛', desc: '【暗】心結難解，容易鑽牛角尖或走極端。需注意法律糾紛、感情爛桃花或意外血光，情緒起伏劇烈。', advice: '解開內心的心結，不要太過偏執。小心處理感情與人際邊界，避免因情緒失控而引發衝突。' }, element: '火' },
+          { id: 'qisha', name: '七殺', upright: { keyword: '衝勁十足、開創', desc: '【亮】如肅殺之將，幹勁十足。敢愛敢恨，追求激情與主導權。有強烈物質慾望，擅長透過冒險、投資等高風險方式獲利。', advice: '拿出魄力與執行力！現在是透過冒險與突破來獲利的時機，但要將這股衝勁轉化為建設性的開創力量。' }, reversed: { keyword: '衝動魯莽、挫折', desc: '【暗】外表衝動內心猶豫，容易意氣用事。想掌控局面卻常引發衝突，適合單打獨鬥但易感孤獨。', advice: '冷靜下來，衝動容易誤事。高風險雖有高回報，但此刻需防範挫折，避免因掌控欲過強而玉石俱焚。' }, element: '金' },
+          { id: 'tianji', name: '天機', upright: { keyword: '機智靈活、策略', desc: '【亮】軍師運籌帷幄，反應靈敏，計畫周詳。善於變動中尋找機會，適合動腦規劃。', advice: '多動腦筋，規劃周全的策略。利用你的靈活反應來應對變化，智取勝於力敵。' }, reversed: { keyword: '焦慮算計、自誤', desc: '【暗】聰明反被聰明誤，思慮過多導致精神焦慮。容易因過度算計或投機心態而招致失敗。', advice: '停止無謂的焦慮與猜疑，讓大腦休息一下。腳踏實地，不要試圖走捷徑或耍小聰明。' }, element: '木' },
+          { id: 'tiantong', name: '天同', upright: { keyword: '福氣隨緣、享受', desc: '【亮】福星高照，保有赤子之心。重視心靈交流與生活品質，適合穩定、固定的發展模式。', advice: '保持樂觀，善用親和力與適應性。對於金錢與感情不妨隨性一些，福氣自然會來。' }, reversed: { keyword: '懶散依賴、逃避', desc: '【暗】過於安逸導致失去動力，遇困難傾向逃避。容易依賴伴侶或外援，怕受傷而退縮。', advice: '不要再逃避現實了，過度依賴只會讓你停滯不前。需在安逸中尋找動力，培養獨立面對問題的勇氣。' }, element: '水' },
+          { id: 'tanlang', name: '貪狼', upright: { keyword: '八面玲瓏、多藝', desc: '【亮】慾望之神，八面玲瓏，學習力與適應力強。在社交場合如魚得水，充滿機會與吸引力。', advice: '積極展現你的才華與魅力，多參加社交活動。你的慾望是你前進的動力，去爭取吧！' }, reversed: { keyword: '貪慾失控、虛浮', desc: '【暗】慾望失控，容易沈迷於不良嗜好或肉慾。投機心態重，容易招惹爛桃花或因小失大。', advice: '克制過度的貪念與慾望，腳踏實地。小心桃色糾紛與投機陷阱，以免身敗名裂。' }, element: '木/水' },
+          { id: 'jumen', name: '巨門', upright: { keyword: '能言善道、洞察', desc: '【亮】觀察力敏銳，能洞察人心與黑暗面。口才極佳，善於深思與研究，能挖掘事物的核心。', advice: '善用你的口才與分析能力，深入溝通。你的洞察力能幫你看穿真相，解決複雜問題。' }, reversed: { keyword: '口舌是非、多疑', desc: '【暗】禍從口出，容易引發口舌是非。內心陰暗多疑，容易誤解他人或被他人誤解，人際關係緊張。', advice: '少說多做，謹言慎行。調整負面思考的習慣，不要總是往壞處想，避免捲入八卦。' }, element: '水' },
+          { id: 'tianliang', name: '天梁', upright: { keyword: '成熟蔭庇、解厄', desc: '【亮】老人星，成熟穩重，講求原則。能逢凶化吉，具有照顧他人的責任感與長輩緣。', advice: '堅持你的原則與正義感，尋求長輩的建議。扮演照顧者的角色，助人即是助己。' }, reversed: { keyword: '老氣橫秋、固執', desc: '【暗】過於說教讓人厭煩，倚老賣老。固執己見，過度挑剔細節，容易陷入人際孤立。', advice: '放下身段，不要太愛說教。多傾聽他人的意見，太過固執只會讓你變得孤獨。' }, element: '土' },
+          { id: 'pojun', name: '破軍', upright: { keyword: '突破創新、先鋒', desc: '【亮】耗星，不破不立。具備強大的破壞與建設力，適合推翻舊制，開創全新的局面。', advice: '大膽創新，打破舊有的框架！現在不是守成的時候，徹底的改變才能帶來生機。' }, reversed: { keyword: '盲目破壞、損耗', desc: '【暗】破壞力失控，為了改變而改變，導致資源耗盡。六親緣薄，行事魯莽不計後果。', advice: '不要盲目破壞，注意資源的消耗。在改變之前先評估代價，避免造成不可挽回的損失。' }, element: '水' }
+        ];
+
+        const auxStarsData = [
+          { id: 'wenchang', name: '文昌', type: 'lucky', keyword: '正統文書、理性', desc: '吉星。代表正統學術、文書契約、SOP、理性溝通。', advice: '善用白紙黑字的契約保障權益，溝通時保持理性與邏輯。' },
+          { id: 'wenqu', name: '文曲', type: 'lucky', keyword: '感性才華、口才', desc: '吉星。代表感性、藝術才華、口才表達、非正統途徑、桃花。', advice: '發揮你的創意、直覺與個人魅力，用感性去打動人心。' },
+          { id: 'zuofu', name: '左輔', type: 'lucky', keyword: '男平輩、明助力', desc: '吉星。代表「男性」平輩或晚輩的助力，屬於「明面」上的具體幫助（如出錢出力）。', advice: '尋求男性同事、朋友或合作夥伴的具體協助，團結力量大。' },
+          { id: 'youbi', name: '右弼', type: 'lucky', keyword: '女平輩、暗支持', desc: '吉星。代表「女性」平輩或晚輩的助力，屬於「隱性」的精神支持或私下協調。', advice: '留意女性友人的建議，或尋求私下的溝通協調與精神支持。' },
+          { id: 'tiankui', name: '天魁', type: 'lucky', keyword: '男長輩、明提拔', desc: '吉星。代表「男性」長輩或上司的提拔，屬於「明面」的機會與貴人。', advice: '多向男性長輩或主管請益，展現你的能力，機會就在眼前。' },
+          { id: 'tianyue', name: '天鉞', type: 'lucky', keyword: '女長輩、暗關照', desc: '吉星。代表「女性」長輩或上司的關照，屬於「暗中」的機會與貴人。', advice: '留意女性長輩的提點，或私下給予的機會，保持謙虛。' },
+          { id: 'qingyang', name: '擎羊', type: 'unlucky', keyword: '衝動、一刀切', desc: '煞星。代表「快」、衝動、競爭、衝突、一刀兩斷。執行力強但過於尖銳，易受傷。', advice: '做事果斷是好事，但要避免魯莽與人發生正面衝突，注意受傷與血光。' },
+          { id: 'tuoluo', name: '陀羅', type: 'unlucky', keyword: '拖延、糾結', desc: '煞星。代表「慢」、拖延、糾結、原地打轉、蹉跎歲月。像陀螺一樣轉個不停，進度停滯。', advice: '事情會卡住或拖延一陣子，陷入迴圈。需要極大的耐心去釐清糾結的點，切勿鑽牛角尖。' },
+          { id: 'huoxing', name: '火星', type: 'unlucky', keyword: '明火、暴脾氣', desc: '煞星。代表爆發、明火、暴脾氣、突發狀況。來得快去得快，像火山爆發。', advice: '控制情緒，小心突發的意外或爭執，速戰速決，不要泥泥帶水。' },
+          { id: 'lingxing', name: '鈴星', type: 'unlucky', keyword: '暗火、冷戰', desc: '煞星。代表隱忍、暗火、冷戰、精算。像悶燒鍋一樣，把不滿記在心裡。', advice: '有話直說，不要悶在心裡生悶氣或搞冷戰，以免造成內傷。' },
+          { id: 'dikong', name: '地空', type: 'unlucky', keyword: '精神空虛、幻想', desc: '煞星。代表精神上的空虛、幻想、不務實、得而復失。天馬行空但缺乏執行。', advice: '適合從事創意、玄學或精神層面的思考，不適合具體的金錢投資。' },
+          { id: 'dijie', name: '地劫', type: 'unlucky', keyword: '物質損失、動盪', desc: '煞星。代表物質上的損失、波動、半路攔截。像浪裡行舟，風險極大。', advice: '局勢動盪不安，請看緊荷包，保守行事，避免冒險投資。' },
+          { id: 'lucun', name: '祿存', type: 'lucky', keyword: '天財、保守', desc: '吉星。代表天得之財、儲蓄、謹慎保守。雖然有錢但容易孤獨（羊陀夾祿）。', advice: '採取保守穩健的理財策略，積穀防饑，不要隨意變動。' },
+          { id: 'tianma', name: '天馬', type: 'special', keyword: '變動、奔波', desc: '中性星。代表變動、奔波、遠行、忙碌。動起來才有財（祿馬交馳）。', advice: '不適合靜守，必須動起來！出差、旅遊或改變現狀會帶來轉機。' },
+          { id: 'hualu', name: '化祿', type: 'lucky', keyword: '緣分、愉悅', desc: '吉星。代表緣分增加、愉悅、享受、順利、財祿。人際關係的潤滑劑。', advice: '現在是廣結善緣、享受成果的好時機，保持愉快的心情。' },
+          { id: 'huaquan', name: '化權', type: 'neutral', keyword: '權力、掌控', desc: '中性星。代表掌權、控制欲、競爭、強勢、行動力。想要主導一切。', advice: '積極爭取主導權，展現你的專業與強勢，但要小心人際摩擦。' },
+          { id: 'huake', name: '化科', type: 'lucky', keyword: '名聲、科甲', desc: '吉星。代表名聲、科甲、面子、學術表現、貴人解厄。重視外在形象。', advice: '愛惜羽毛，建立良好的名聲與形象，有利於考試或升遷。' },
+          { id: 'huaji', name: '化忌', type: 'unlucky', keyword: '遺憾、虧欠', desc: '煞星。代表虧欠、遺憾、空缺、是非、不順。前世的債，今生的劫。', advice: '面對生命中的不圓滿，視為還債與修行的過程，低調忍耐。' }
+        ];
+
+        const twelveStagesData = [
+          { name: '長生', keyword: '萌芽、起始', desc: '新的開始，生機勃勃，源源不絕。', time: '寅時 (03-05點)', num: 1, energy: '⭐️⭐️⭐️⭐️' },
+          { name: '沐浴', keyword: '不穩、桃花', desc: '桃花敗地，喜新厭舊，不穩定。', time: '卯時 (05-07點)', num: 2, energy: '⭐️⭐️' },
+          { name: '冠帶', keyword: '成長、包裝', desc: '穿衣戴帽，注重外表，小有成就。', time: '辰時 (07-09點)', num: 3, energy: '⭐️⭐️⭐️' },
+          { name: '臨官', keyword: '正式、展現', desc: '正式任職，努力工作，薪資增長。', time: '巳時 (09-11點)', num: 4, energy: '⭐️⭐️⭐️⭐️' },
+          { name: '帝旺', keyword: '頂峰、極致', desc: '運勢頂峰，氣勢強盛，唯我獨尊。', time: '午時 (11-13點)', num: 5, energy: '⭐️⭐️⭐️⭐️⭐️' },
+          { name: '衰', keyword: '衰退、守成', desc: '盛極而衰，轉攻為守，氣勢減弱。', time: '未時 (13-15點)', num: 6, energy: '⭐️⭐️⭐️' },
+          { name: '病', keyword: '漏洞、無力', desc: '能量不足，漏洞出現，心有餘力不足。', time: '申時 (15-17點)', num: 7, energy: '⭐️⭐️' },
+          { name: '死', keyword: '靜止、停滯', desc: '靜止不動，缺乏生氣，鑽牛角尖。', time: '酉時 (17-19點)', num: 8, energy: '⭐️' },
+          { name: '墓', keyword: '收藏、被動', desc: '收藏積累，陷入被動，資源被鎖住。', time: '戌時 (19-21點)', num: 9, energy: '⭐️⭐️' },
+          { name: '絕', keyword: '斷絕、谷底', desc: '完全斷絕，跌入谷底，絕處逢生。', time: '亥時 (21-23點)', num: 10, energy: '⭐️' },
+          { name: '胎', keyword: '孕育、規劃', desc: '重新孕育，希望萌芽，尚未成形。', time: '子時 (23-01點)', num: 11, energy: '⭐️⭐️' },
+          { name: '養', keyword: '休養、等待', desc: '休養生息，等待時機，接受呵護。', time: '丑時 (01-03點)', num: 12, energy: '⭐️⭐️⭐️' }
+        ];
+
+        // --- 工具 ---
+        const shuffleArray = (array) => {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        };
+
+        const StarryBackground = () => (
+          <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-purple-100">
+               <div className="absolute top-0 left-0 w-full h-full opacity-40 bg-[radial-gradient(circle_at_50%_50%,_#e9d5ff_0%,_transparent_60%)]"></div>
+               <div className="absolute bottom-0 right-0 w-full h-full opacity-30 bg-[radial-gradient(circle_at_80%_80%,_#fbcfe8_0%,_transparent_50%)]"></div>
+            </div>
+            {[...Array(60)].map((_, i) => (
+              <div 
+                key={i}
+                className="absolute rounded-full bg-purple-300 opacity-60 animate-twinkle"
+                style={{
+                  top: `${Math.random() * 100}%`,
+                  left: `${Math.random() * 100}%`,
+                  width: `${Math.random() * 3 + 1}px`, 
+                  height: `${Math.random() * 3 + 1}px`,
+                  animationDelay: `${Math.random() * 5}s`,
+                  animationDuration: `${Math.random() * 3 + 2}s`
+                }}
+              />
+            ))}
           </div>
+        );
 
-          <div className="flex-1 relative flex items-center justify-center p-3">
-             <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-                 <div className="w-24 h-24 border-2 border-current rounded-full border-dotted"></div>
-                 <div className="absolute w-32 h-32 border border-current rounded-full opacity-50"></div>
-             </div>
-             
-            {/* 解決文字倒置問題：只旋轉圖標，不旋轉整個容器 */}
-            <div className={`transform transition-transform duration-700 ${isReversed ? 'rotate-180 opacity-70 grayscale brightness-90' : 'text-purple-700 drop-shadow-lg'}`}>
-               {getIcon()}
+        const Toast = ({ message, type, onClose }) => {
+          useEffect(() => {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+          }, [onClose]);
+
+          if (!message) return null;
+          const bgClass = type === 'error' ? 'bg-red-500' : 'bg-green-500';
+
+          return (
+            <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg text-white flex items-center gap-2 ${bgClass} animate-fade-in-down transition-all`}>
+              {type === 'error' ? <Icons.XCircle size={20}/> : <Icons.Sparkles size={20}/>}
+              <span className="font-medium text-sm">{message}</span>
             </div>
+          );
+        };
+
+        const DecorationPattern = ({ className }) => (
+          <svg className={className} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M50 0C50 0 60 20 80 20C60 20 50 40 50 40C50 40 40 20 20 20C40 20 50 0 50 0Z" fill="currentColor" opacity="0.6"/>
+            <path d="M50 100C50 100 60 80 80 80C60 80 50 60 50 60C50 60 40 80 20 80C40 80 50 100 50 100Z" fill="currentColor" opacity="0.6"/>
+            <circle cx="50" cy="50" r="5" fill="currentColor" opacity="0.8"/>
+          </svg>
+        );
+
+        const Card = ({ title, subtitle, shortDesc, type, id, isRevealed, delay = 0, isReversed = false, colorClass, extraInfo, onClick, isInteractable = false }) => {
+          const [flipped, setFlipped] = useState(false);
+
+          useEffect(() => {
+            if (isRevealed) {
+              const timer = setTimeout(() => setFlipped(true), delay);
+              return () => clearTimeout(timer);
+            } else {
+              setFlipped(false);
+            }
+          }, [isRevealed, delay]);
+
+          const contentStyle = isReversed 
+            ? "bg-gradient-to-b from-slate-100 to-slate-300 text-slate-700" 
+            : "bg-gradient-to-b from-purple-50 to-white text-purple-900";   
             
-            {extraInfo && <span className="absolute top-2 right-2 text-[10px] text-red-600 font-bold border border-red-400 px-1 rounded bg-white/90 shadow-sm">{extraInfo}</span>}
-          </div>
+          const borderStyle = isReversed ? "border-slate-400" : "border-amber-200";
+          const headerBg = isReversed ? "bg-slate-500" : "bg-purple-600";
+          const headerText = isReversed ? "text-slate-100" : "text-amber-100";
 
-          {/* 顯示簡短關鍵字而非長描述 */}
-          <div className={`p-2 text-center border-t border-current/10 min-h-[70px] flex items-center justify-center ${isReversed ? 'bg-slate-200/50' : 'bg-purple-100/30'}`}>
-             <p className="text-sm font-bold tracking-wide line-clamp-2">
-                {shortDesc}
-             </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+          const getIcon = () => {
+            if (type === 'main' && id && starIcons[id]) return starIcons[id];
+            if (type === 'aux' && id && starIcons[id]) return starIcons[id];
+            if (type === 'main') return <Icons.Star size={56} strokeWidth={1.5} />;
+            if (type === 'aux') return <Icons.Sparkles size={48} strokeWidth={1.5} />;
+            if (type === 'stage') return <Icons.RefreshCw size={48} strokeWidth={1.5} />;
+            return <Icons.Star size={48} strokeWidth={1.5} />;
+          };
 
-const MiniCardBack = ({ onClick, index }) => (
-  <div 
-    onClick={() => onClick(index)}
-    className="group relative w-16 h-24 sm:w-20 sm:h-32 cursor-pointer transition-all duration-300 hover:-translate-y-2 hover:z-10 perspective-1000"
-    style={{ animationDelay: `${index * 0.05}s` }}
-  >
-      <div className="absolute inset-0 bg-purple-500 rounded-lg blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-300"></div>
-      <div className="absolute inset-0 rounded-lg border border-purple-400/50 shadow-md flex flex-col items-center justify-center overflow-hidden bg-[#1a0b2e] animate-fade-in-up">
-         <div className="w-12 h-12 border border-purple-500/30 rounded-full flex items-center justify-center">
-             <div className="w-1 h-1 bg-purple-200 rounded-full shadow-[0_0_8px_white]"></div>
-         </div>
-         <DecorationPattern className="absolute bottom-1 w-16 h-16 text-purple-800/20" />
-      </div>
-  </div>
-);
-
-const DrawingDeck = ({ title, count, onCardSelect, subtitle, refreshKey }) => {
-  return (
-    <div className="flex flex-col items-center w-full max-w-4xl px-2" key={refreshKey}>
-       <div className="text-center mb-6 animate-pulse">
-         <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-500 mb-1">
-          {title}
-        </h3>
-        {subtitle && <p className="text-purple-800/60 text-xs">{subtitle}</p>}
-       </div>
-      
-      <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
-        {[...Array(count)].map((_, i) => (
-          <MiniCardBack key={i} index={i} onClick={onCardSelect} />
-        ))}
-      </div>
-      <p className="mt-8 text-purple-800/40 text-xs font-light tracking-widest">請聆聽內心的聲音，點擊一張牌</p>
-    </div>
-  );
-};
-
-const App = () => {
-  const [step, setStep] = useState('input');
-  const [drawPhase, setDrawPhase] = useState('main');
-  const [question, setQuestion] = useState('');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [currentDeck, setCurrentDeck] = useState([]);
-  const [refreshKey, setRefreshKey] = useState(0); 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [selections, setSelections] = useState({
-    main: null,
-    aux: null,
-    extraAux: null,
-    stage: null
-  });
-  const resultsRef = useRef(null);
-
-  // --- Firebase Authentication ---
-  useEffect(() => {
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-      } else {
-        try {
-            await signInAnonymously(auth);
-        } catch(e) {
-            console.error("Auth failed", e);
-        }
-      }
-    };
-    initAuth();
-  }, []);
-
-  // --- Initialization Logic ---
-  const initPhase = (phase, excludeName = null) => {
-    setDrawPhase(phase);
-    setRefreshKey(prev => prev + 1); 
-    
-    let deck = [];
-    
-    if (phase === 'main') {
-      deck = shuffleArray(mainStarsData).map(star => ({
-        ...star,
-        isReversed: Math.random() > 0.5,
-        type: 'main'
-      }));
-    } else if (phase === 'aux') {
-      deck = shuffleArray(auxStarsData).map(star => ({ ...star, type: 'aux' }));
-    } else if (phase === 'extra') {
-      const remaining = auxStarsData.filter(s => s.name !== excludeName);
-      deck = shuffleArray(remaining).map(star => ({ ...star, type: 'aux' }));
-    } else if (phase === 'stage') {
-      deck = shuffleArray(twelveStagesData).map(star => ({ ...star, type: 'stage' }));
-    }
-    
-    setCurrentDeck(deck);
-  };
-
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-  };
-
-  const startDrawing = async () => {
-    if (!question.trim()) {
-      showToast("請誠心輸入您想詢問的問題...", 'error');
-      return;
-    }
-    if (!name.trim() || !email.trim()) {
-      showToast("請填寫您的姓名與 Email", 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'customer_leads'), {
-            name,
-            email,
-            question,
-            timestamp: new Date().toISOString(),
-            status: 'new'
-        });
-
-        setIsSubmitting(false);
-        setStep('drawing');
-        setSelections({ main: null, aux: null, extraAux: null, stage: null });
-        initPhase('main');
-        showToast("資料已送出，正在洗牌...", 'success');
-
-    } catch (e) {
-        console.error("Error adding document: ", e);
-        setIsSubmitting(false);
-        showToast("連線錯誤，請稍後再試", 'error');
-        setStep('drawing');
-        initPhase('main');
-    }
-  };
-
-  const handleCardClick = (index) => {
-    const selectedCard = currentDeck[index];
-
-    if (drawPhase === 'main') {
-      const displayDesc = selectedCard.isReversed ? selectedCard.reversed.desc : selectedCard.upright.desc;
-      const displayKeyword = selectedCard.isReversed ? selectedCard.reversed.keyword : selectedCard.upright.keyword;
-      const displayAdvice = selectedCard.isReversed ? selectedCard.reversed.advice : selectedCard.upright.advice;
-      
-      setSelections(prev => ({ 
-          ...prev, 
-          main: { ...selectedCard, displayDesc, displayKeyword, displayAdvice } 
-      }));
-      setTimeout(() => initPhase('aux'), 500);
-      
-    } else if (drawPhase === 'aux') {
-      setSelections(prev => ({ ...prev, aux: selectedCard }));
-      if (selectedCard.name === '天馬') {
-        setTimeout(() => initPhase('extra', selectedCard.name), 500);
-      } else {
-        setTimeout(() => initPhase('stage'), 500);
-      }
-      
-    } else if (drawPhase === 'extra') {
-      setSelections(prev => ({ ...prev, extraAux: selectedCard }));
-      setTimeout(() => initPhase('stage'), 500);
-      
-    } else if (drawPhase === 'stage') {
-      setSelections(prev => ({ ...prev, stage: selectedCard }));
-      setStep('result');
-      
-      setTimeout(() => {
-         resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }
-  };
-
-  const reset = () => {
-    setQuestion('');
-    setStep('input');
-    setDrawPhase('main');
-    setSelections({ main: null, aux: null, extraAux: null, stage: null });
-  };
-
-  const getDeepInterpretation = () => {
-    if (!selections.main) return null;
-    const { main, aux, extraAux, stage } = selections;
-
-    const mainChar = main.displayKeyword.split('、')[0];
-    const auxChar = aux.desc.split('。')[0];
-
-    const coreStatus = main.isReversed ? "逆位（暗）" : "正位（亮）";
-    let analysisCore = `針對您詢問的「${question}」，主星【${main.name}】呈現${coreStatus}。`;
-    if(main.isReversed) {
-        analysisCore += `\n⚠️ 這顯示核心能量目前較為低迷或方向錯誤，具體表現為「${main.displayKeyword}」。您的心態或處境可能較為掙扎，或是外在環境不配合。`;
-    } else {
-        analysisCore += `\n✨ 這是一個強而有力的吉兆，核心能量飽滿，具體表現為「${main.displayKeyword}」。您目前掌握了主動權，或是局勢正朝著有利的方向發展。`;
-    }
-
-    let analysisAux = `輔牌【${aux.name}】帶來了「${auxChar}」的影響。${aux.desc}`;
-    if(aux.name === '天馬') {
-        analysisAux = `輔牌出現【天馬】，顯示這件事不會靜止不變，而是處於「奔波變動」的狀態。`;
-    }
-
-    if (extraAux) {
-        analysisAux += ` 此外，由於天馬的牽動，變動之後將會引發【${extraAux.name}】的性質，這意味著事情的結果會傾向於${extraAux.desc}`;
-    }
-
-    let analysisStage = `目前的時運能量處於【${stage.name}】階段。`;
-    analysisStage += `\n⏱️ 時間應期：此牌對應數字為【${stage.num}】。`;
-    analysisStage += `這意味著事情的發生或轉折點可能在 ${stage.num} 天、${stage.num} 週、${stage.num} 個月或 ${stage.num} 年之後（視問題短期或長期而定）。`;
-    analysisStage += `\n📅 特定時段：亦可參考 ${stage.time}。`;
-
-    let synthesis = "";
-    if(main.isReversed) {
-        if(aux.type === 'lucky') {
-             synthesis = `【險中求穩局】\n您目前的核心狀態傾向「${mainChar}」，顯示內心或局勢上有不穩定的因子。但幸運的是，輔牌「${aux.name}」帶來了「${auxChar}」的能量。這意味著雖然您個人狀態未達巔峰，但外部環境或貴人運極佳。建議您不要強出頭，而是懂得「借力使力」，依賴這股外部助力來度過低潮。`;
-        } else {
-             synthesis = `【嚴峻考驗局】\n這是一段較為辛苦的時期。主星呈現「${mainChar}」的負面特質，顯示內部能量耗損或方向迷失；而輔牌「${aux.name}」又帶來「${auxChar}」的考驗。這代表內憂外患同時存在。建議您此刻「以靜制動」，先解決內心的矛盾，避免在混亂中做重大決定，保留實力才是上策。`;
-        }
-    } else {
-        if(aux.type === 'lucky') {
-             synthesis = `【乘風破浪局】\n這是一個絕佳的組合！主星發揮了「${mainChar}」的優勢，能量飽滿且方向正確；加上輔牌「${aux.name}」給予「${auxChar}」的加持。這不僅是運氣好，更是實力與機會的結合。請務必把握當下，大膽執行您的計畫，現在正是「水到渠成」的高光時刻。`;
-        } else {
-             synthesis = `【披荊斬棘局】\n您本身具備「${mainChar}」的強大能力與優勢，但環境中卻存在「${auxChar}」的干擾（由${aux.name}帶來）。這就像是駕駛跑車行駛在顛簸路面，雖然有能力，但過程難免顛簸。建議您保持耐心，利用主星的優勢去克服輔牌的阻礙，不要因一時的挫折而自我懷疑，最終定能突破重圍。`;
-        }
-    }
-
-    const finalAdvice = `${main.displayAdvice} 同時，${aux.advice}`;
-
-    return {
-        core: analysisCore,
-        aux: analysisAux,
-        stage: analysisStage,
-        synthesis: synthesis,
-        advice: finalAdvice
-    };
-  };
-
-  const resultData = step === 'result' ? getDeepInterpretation() : null;
-
-  return (
-    <div className="min-h-screen bg-purple-50 text-slate-800 font-sans selection:bg-purple-200 relative overflow-x-hidden">
-      <StarryBackground />
-      
-      {toast && (
-        <Toast 
-          message={toast.message} 
-          type={toast.type} 
-          onClose={() => setToast(null)} 
-        />
-      )}
-      
-      <header className="p-4 text-center border-b border-purple-100 bg-white/70 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center justify-center gap-3">
-          <Moon className="text-purple-500 w-5 h-5 animate-pulse" />
-          <h1 className="text-2xl font-bold tracking-[0.1em] text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
-            小歐 紫靈牌
-          </h1>
-          <Star className="text-purple-500 w-5 h-5 animate-pulse" />
-        </div>
-      </header>
-
-      <main className="relative z-10 max-w-4xl mx-auto p-4 min-h-[85vh] flex flex-col items-center justify-center">
-        
-        {step === 'input' && (
-          <div className="w-full max-w-lg bg-white/80 backdrop-blur-xl p-8 rounded-[2rem] border border-white shadow-2xl animate-fade-in">
-            <div className="mb-6 text-center">
-              <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-purple-200 animate-float">
-                <MessageCircle size={36} className="text-white" />
-              </div>
-              <h2 className="text-xl font-semibold mb-2 text-purple-900">心中的疑惑</h2>
-              <p className="text-sm text-slate-500">向宇宙發出信號，星辰將為您指引方向</p>
-            </div>
-
-            {/* 個人資料收集區塊 */}
-            <div className="mb-6 grid grid-cols-1 gap-4">
-                <div className="relative">
-                    <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-purple-400" size={20} />
-                    <input 
-                      type="text" 
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="您的姓名 / 暱稱"
-                      className="w-full bg-white border border-purple-200 rounded-xl py-3 pl-12 pr-4 text-purple-900 placeholder-purple-300 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                    />
-                </div>
-                <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-purple-400" size={20} />
-                    <input 
-                      type="email" 
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="您的 Email"
-                      className="w-full bg-white border border-purple-200 rounded-xl py-3 pl-12 pr-4 text-purple-900 placeholder-purple-300 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                    />
-                </div>
-            </div>
-
-            <div className="mb-6 bg-purple-50 p-5 rounded-xl border border-purple-100 text-slate-600 text-sm leading-relaxed space-y-3 font-light tracking-wide">
-               <div>
-                 <span className="font-bold text-purple-600 block mb-1">第一步：</span>
-                 找一個安靜的環境坐下來。雙腳放在地面，雙手放到膝蓋上。
-               </div>
-               <div>
-                 <span className="font-bold text-purple-600 block mb-1">第二步：</span>
-                 慢慢閉上眼睛，感受腳掌貼服地面，感受肌肉從腳掌一路延伸到大腿、軀幹到頭頂、手腳。並且放鬆這些肌肉。然後慢慢的將手搭在膝蓋上。將注意力放在鼻尖前方。感受一下空氣在這地方隨著你的鼻息進出。觀察呼吸三次。抽牌時想著你心中的疑問。
-               </div>
-            </div>
-            
-            <textarea 
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="請輸入您想詢問的問題..."
-              className="w-full bg-white border border-purple-200 rounded-2xl p-5 text-purple-900 placeholder-purple-300 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 h-32 resize-none mb-6 transition-all"
-            />
-            
-            <button 
-              onClick={startDrawing}
-              disabled={isSubmitting}
-              className={`group w-full bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-bold py-4 rounded-2xl shadow-lg shadow-purple-200 flex items-center justify-center gap-2 transition-all transform ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02]'}`}
+          return (
+            <div 
+              className={`relative w-36 h-60 perspective-1000 m-2 ${isInteractable ? 'cursor-pointer hover:scale-105 transition-transform duration-300' : ''}`}
+              onClick={onClick}
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  <span>資料傳送中...</span>
-                </>
-              ) : (
-                <>
-                  <Send size={20} className="group-hover:translate-x-1 transition-transform"/>
-                  <span className="tracking-widest">送出資料並開始占卜</span>
-                </>
-              )}
-            </button>
+              <div className={`relative w-full h-full transition-transform duration-700 transform-style-3d ${flipped ? 'rotate-y-180' : ''}`}>
+                <div className="absolute w-full h-full rounded-xl backface-hidden flex flex-col items-center justify-center overflow-hidden shadow-2xl border-2 border-purple-400/50 bg-[#1a0b2e]">
+                   <div className="absolute inset-0 opacity-30">
+                       <svg width="100%" height="100%">
+                          <defs>
+                            <pattern id="mandala" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                               <circle cx="20" cy="20" r="1" fill="rgba(255,255,255,0.5)"/>
+                               <path d="M20 0 L40 20 L20 40 L0 20 Z" fill="none" stroke="rgba(168,85,247,0.2)" strokeWidth="1"/>
+                            </pattern>
+                          </defs>
+                          <rect width="100%" height="100%" fill="url(#mandala)"/>
+                       </svg>
+                   </div>
+                   <div className="absolute w-28 h-28 border border-purple-500/30 rounded-full flex items-center justify-center animate-spin-slow">
+                      <div className="w-24 h-24 border border-fuchsia-500/20 rounded-full border-dashed"></div>
+                      <div className="w-20 h-20 border border-purple-400/20 rounded-full transform rotate-45"></div>
+                   </div>
+                   <div className="relative z-10 w-12 h-12 rounded-full bg-gradient-to-br from-purple-800 to-indigo-900 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.9)] border border-purple-300/40">
+                     <span className="text-xl text-white font-serif font-bold drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]">紫</span>
+                   </div>
+                   <DecorationPattern className="absolute top-2 left-2 w-6 h-6 text-purple-500 rotate-45" />
+                   <DecorationPattern className="absolute top-2 right-2 w-6 h-6 text-purple-500 -rotate-45" />
+                   <DecorationPattern className="absolute bottom-2 left-2 w-6 h-6 text-purple-500 rotate-[135deg]" />
+                   <DecorationPattern className="absolute bottom-2 right-2 w-6 h-6 text-purple-500 rotate-[225deg]" />
+                </div>
+
+                <div className={`absolute w-full h-full rounded-xl shadow-xl backface-hidden rotate-y-180 flex flex-col overflow-hidden border-[5px] double-border ${borderStyle} ${contentStyle}`}>
+                  <div className="absolute inset-1 border border-current opacity-10 rounded-lg pointer-events-none"></div>
+
+                  <div className={`h-14 w-full flex flex-col items-center justify-center relative overflow-hidden ${headerBg}`}>
+                      <div className="absolute inset-0 bg-black/10"></div>
+                      <div className="flex items-center gap-2 relative z-10 w-full justify-center px-1">
+                         <DecorationPattern className={`w-4 h-4 ${headerText}`} />
+                         <h2 className={`font-serif text-lg font-bold tracking-widest ${headerText}`}>{title}</h2>
+                         <DecorationPattern className={`w-4 h-4 ${headerText}`} />
+                      </div>
+                      
+                      <div className={`flex items-center gap-1 text-[10px] font-bold px-3 py-0.5 rounded-full -mb-3 relative z-10 bg-white/90 text-purple-900 shadow-sm`}>
+                         {isReversed ? <Icons.ArrowDown size={10} className="text-slate-600"/> : <Icons.ArrowUp size={10} className="text-purple-600"/>}
+                         <span className={isReversed ? "text-slate-700" : "text-purple-800"}>
+                             {type === 'main' ? (isReversed ? '逆位' : '正位') : subtitle}
+                         </span>
+                      </div>
+                  </div>
+
+                  <div className="flex-1 relative flex items-center justify-center p-3">
+                      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                          <div className="w-24 h-24 border-2 border-current rounded-full border-dotted"></div>
+                          <div className="absolute w-32 h-32 border border-current rounded-full opacity-50"></div>
+                      </div>
+                      
+                    <div className={`transform transition-transform duration-700 ${isReversed ? 'rotate-180 opacity-70 grayscale brightness-90' : 'text-purple-700 drop-shadow-lg'}`}>
+                       {getIcon()}
+                    </div>
+                    
+                    {extraInfo && <span className="absolute top-2 right-2 text-[10px] text-red-600 font-bold border border-red-400 px-1 rounded bg-white/90 shadow-sm">{extraInfo}</span>}
+                  </div>
+
+                  <div className={`p-2 text-center border-t border-current/10 min-h-[70px] flex items-center justify-center ${isReversed ? 'bg-slate-200/50' : 'bg-purple-100/30'}`}>
+                      <p className="text-sm font-bold tracking-wide line-clamp-2">
+                         {shortDesc}
+                      </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        const MiniCardBack = ({ onClick, index }) => (
+          <div 
+            onClick={() => onClick(index)}
+            className="group relative w-16 h-24 sm:w-20 sm:h-32 cursor-pointer transition-all duration-300 hover:-translate-y-2 hover:z-10 perspective-1000"
+            style={{ animationDelay: `${index * 0.05}s` }}
+          >
+              <div className="absolute inset-0 bg-purple-500 rounded-lg blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 rounded-lg border border-purple-400/50 shadow-md flex flex-col items-center justify-center overflow-hidden bg-[#1a0b2e] animate-fade-in-up">
+                 <div className="w-12 h-12 border border-purple-500/30 rounded-full flex items-center justify-center">
+                     <div className="w-1 h-1 bg-purple-200 rounded-full shadow-[0_0_8px_white]"></div>
+                 </div>
+                 <DecorationPattern className="absolute bottom-1 w-16 h-16 text-purple-800/20" />
+              </div>
           </div>
-        )}
+        );
 
-        {step === 'drawing' && (
-          <div className="w-full flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
-            <div className="mb-6 text-center">
-              <span className="px-4 py-1 rounded-full bg-white/60 border border-purple-200 text-purple-800 text-xs tracking-wider mb-4 inline-block backdrop-blur-md shadow-sm">
-                正在解讀：{question.length > 10 ? question.substring(0,10) + '...' : question}
-              </span>
-            </div>
-
-            {drawPhase === 'main' && (
-              <DrawingDeck 
-                title="抽取【主星】" 
-                subtitle="請從 14 張牌中選取一張，代表核心能量"
-                count={14} 
-                onCardSelect={handleCardClick}
-                refreshKey={refreshKey} 
-              />
-            )}
-            {drawPhase === 'aux' && (
-              <DrawingDeck 
-                title="抽取【輔牌】" 
-                subtitle="請從 18 張牌中選取一張，代表助力或阻力"
-                count={18} 
-                onCardSelect={handleCardClick}
-                refreshKey={refreshKey}
-              />
-            )}
-            {drawPhase === 'extra' && (
-              <DrawingDeck 
-                title="✨ 天馬星現！" 
-                subtitle="奔波變動，請再加抽一張"
-                count={17} 
-                onCardSelect={handleCardClick}
-                refreshKey={refreshKey}
-              />
-            )}
-            {drawPhase === 'stage' && (
-              <DrawingDeck 
-                title="抽取【十二長生】" 
-                subtitle="請從 12 張牌中選取一張，代表時間運勢"
-                count={12} 
-                onCardSelect={handleCardClick}
-                refreshKey={refreshKey}
-              />
-            )}
-          </div>
-        )}
-
-        {step === 'result' && selections.main && resultData && (
-          <div ref={resultsRef} className="w-full flex flex-col items-center animate-fade-in-up pb-12">
-            
-            <div className="mb-10 text-center">
-              <h3 className="text-purple-400 text-xs font-bold tracking-widest uppercase mb-2">Your Question</h3>
-              <p className="relative text-xl sm:text-2xl font-serif text-purple-900 px-8 py-2 border-b border-purple-200 inline-block">
-                "{question}"
-              </p>
-            </div>
-
-            {/* 牌陣展示區 */}
-            <div className="flex flex-wrap justify-center items-start gap-4 mb-12">
-              {/* 1. Main Star */}
-              <div className="flex flex-col items-center">
-                <span className="text-yellow-600 text-xs mb-2 font-bold tracking-widest">主星</span>
-                <Card 
-                  title={selections.main.name}
-                  subtitle={selections.main.element}
-                  desc={selections.main.displayDesc}
-                  shortDesc={selections.main.keyword} 
-                  type="main"
-                  id={selections.main.id}
-                  isReversed={selections.main.isReversed}
-                  isRevealed={true}
-                  delay={100}
-                  colorClass="border-yellow-400"
-                />
-              </div>
-
-              {/* 2. Aux Star */}
-              <div className="flex flex-col items-center">
-                <span className="text-cyan-600 text-xs mb-2 font-bold tracking-widest">輔牌</span>
-                <div className="flex gap-2">
-                    <Card 
-                      title={selections.aux.name}
-                      subtitle={selections.aux.type === 'lucky' ? '吉' : selections.aux.type === 'unlucky' ? '凶' : '特'}
-                      desc={selections.aux.desc}
-                      shortDesc={selections.aux.keyword}
-                      type="aux"
-                      id={selections.aux.id}
-                      isRevealed={true}
-                      delay={400}
-                      colorClass={selections.aux.type === 'lucky' ? 'border-green-400' : selections.aux.type === 'unlucky' ? 'border-red-400' : 'border-blue-400'}
-                    />
-                    {selections.extraAux && (
-                        <Card 
-                          title={selections.extraAux.name}
-                          subtitle="變動"
-                          desc={selections.extraAux.desc}
-                          shortDesc={selections.extraAux.keyword}
-                          type="aux"
-                          id={selections.extraAux.id}
-                          isRevealed={true}
-                          delay={800}
-                          colorClass="border-blue-400"
-                          extraInfo="天馬"
-                        />
-                    )}
-                </div>
-              </div>
-
-              {/* 3. Stage Card */}
-              <div className="flex flex-col items-center">
-                <span className="text-gray-500 text-xs mb-2 font-bold tracking-widest">時運</span>
-                <Card 
-                  title={selections.stage.name}
-                  subtitle={selections.stage.num}
-                  desc={selections.stage.desc}
-                  shortDesc={selections.stage.keyword}
-                  type="stage"
-                  isRevealed={true}
-                  delay={selections.extraAux ? 1200 : 800}
-                  colorClass="border-gray-400"
-                />
-              </div>
-            </div>
-            
-            {/* 新增：牌意詳解表格 */}
-            <div className="w-full max-w-3xl mb-8 bg-white/60 rounded-xl overflow-hidden border border-purple-200 shadow-md animate-fade-in-up">
-                <div className="bg-purple-100/50 px-4 py-2 flex items-center gap-2 border-b border-purple-200">
-                    <FileText size={16} className="text-purple-600" />
-                    <span className="text-sm font-bold text-purple-800">牌面一覽表</span>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-700">
-                        <thead className="text-xs text-slate-500 uppercase bg-purple-50/50">
-                            <tr>
-                                <th className="px-4 py-3">牌名</th>
-                                <th className="px-4 py-3">狀態</th>
-                                <th className="px-4 py-3">核心含義</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-purple-100">
-                            <tr className="bg-white">
-                                <td className="px-4 py-3 font-medium text-purple-900">{selections.main.name}</td>
-                                <td className="px-4 py-3">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${selections.main.isReversed ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}`}>
-                                        {selections.main.isReversed ? '逆位 (暗)' : '正位 (亮)'}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3 text-slate-600">{selections.main.displayDesc}</td>
-                            </tr>
-                            <tr className="bg-purple-50/30">
-                                <td className="px-4 py-3 font-medium text-cyan-900">{selections.aux.name}</td>
-                                <td className="px-4 py-3">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${selections.aux.type === 'lucky' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        {selections.aux.type === 'lucky' ? '吉星' : '煞星'}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3 text-slate-600">{selections.aux.desc}</td>
-                            </tr>
-                            {selections.extraAux && (
-                                <tr className="bg-blue-50/30">
-                                    <td className="px-4 py-3 font-medium text-blue-900">{selections.extraAux.name} (天馬加抽)</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${selections.extraAux.type === 'lucky' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                            {selections.extraAux.type === 'lucky' ? '吉星' : '煞星'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-600">{selections.extraAux.desc}</td>
-                                </tr>
-                            )}
-                            <tr className="bg-white">
-                                <td className="px-4 py-3 font-medium text-slate-900">{selections.stage.name}</td>
-                                <td className="px-4 py-3">
-                                    <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-200 text-slate-700">
-                                        時運
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3 text-slate-600">{selections.stage.desc}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* 深度分析報告 */}
-            <div className="w-full max-w-3xl bg-white/80 backdrop-blur-xl rounded-3xl p-8 border border-white shadow-2xl space-y-6 relative overflow-hidden">
-              {/* 裝飾背景 */}
-              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-200/30 rounded-full blur-3xl -mr-10 -mt-10"></div>
+        const DrawingDeck = ({ title, count, onCardSelect, subtitle, refreshKey }) => {
+          return (
+            <div className="flex flex-col items-center w-full max-w-4xl px-2" key={refreshKey}>
+               <div className="text-center mb-6 animate-pulse">
+                 <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-500 mb-1">
+                  {title}
+                 </h3>
+                {subtitle && <p className="text-purple-800/60 text-xs">{subtitle}</p>}
+               </div>
               
-              <div className="flex items-center gap-3 pb-4 border-b border-purple-100 relative z-10">
-                <BookOpen className="text-purple-500" />
-                <h3 className="text-2xl font-bold text-purple-900">小歐為 [{name}] 的專屬紫靈星語</h3>
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+                {[...Array(count)].map((_, i) => (
+                  <MiniCardBack key={i} index={i} onClick={onCardSelect} />
+                ))}
               </div>
+              <p className="mt-8 text-purple-800/40 text-xs font-light tracking-widest">請聆聽內心的聲音，點擊一張牌</p>
+            </div>
+          );
+        };
 
-              <div className="space-y-6 relative z-10">
+        const App = () => {
+          const [step, setStep] = useState('input');
+          const [drawPhase, setDrawPhase] = useState('main');
+          const [question, setQuestion] = useState('');
+          const [name, setName] = useState('');
+          const [email, setEmail] = useState('');
+          const [currentDeck, setCurrentDeck] = useState([]);
+          const [refreshKey, setRefreshKey] = useState(0); 
+          const [isSubmitting, setIsSubmitting] = useState(false);
+          const [toast, setToast] = useState(null);
+          const [selections, setSelections] = useState({
+            main: null,
+            aux: null,
+            extraAux: null,
+            stage: null
+          });
+          const resultsRef = useRef(null);
+
+          // 模擬 Authentication
+          useEffect(() => {
+             // ... Authentication Logic ...
+          }, []);
+
+          // --- Initialization Logic ---
+          const initPhase = (phase, excludeName = null) => {
+            setDrawPhase(phase);
+            setRefreshKey(prev => prev + 1); 
+            
+            let deck = [];
+            
+            if (phase === 'main') {
+              deck = shuffleArray(mainStarsData).map(star => ({
+                ...star,
+                isReversed: Math.random() > 0.5,
+                type: 'main'
+              }));
+            } else if (phase === 'aux') {
+              deck = shuffleArray(auxStarsData).map(star => ({ ...star, type: 'aux' }));
+            } else if (phase === 'extra') {
+              const remaining = auxStarsData.filter(s => s.name !== excludeName);
+              deck = shuffleArray(remaining).map(star => ({ ...star, type: 'aux' }));
+            } else if (phase === 'stage') {
+              deck = shuffleArray(twelveStagesData).map(star => ({ ...star, type: 'stage' }));
+            }
+            
+            setCurrentDeck(deck);
+          };
+
+          const showToast = (message, type = 'success') => {
+            setToast({ message, type });
+          };
+
+          const startDrawing = async () => {
+            if (!question.trim()) {
+              showToast("請誠心輸入您想詢問的問題...", 'error');
+              return;
+            }
+            if (!name.trim() || !email.trim()) {
+              showToast("請填寫您的姓名與 Email", 'error');
+              return;
+            }
+
+            setIsSubmitting(true);
+
+            // 模擬資料送出
+            setTimeout(() => {
+                setIsSubmitting(false);
+                setStep('drawing');
+                setSelections({ main: null, aux: null, extraAux: null, stage: null });
+                initPhase('main');
+                showToast("資料已送出，正在洗牌...", 'success');
+            }, 1000);
+          };
+
+          const handleCardClick = (index) => {
+            const selectedCard = currentDeck[index];
+
+            if (drawPhase === 'main') {
+              const displayDesc = selectedCard.isReversed ? selectedCard.reversed.desc : selectedCard.upright.desc;
+              const displayKeyword = selectedCard.isReversed ? selectedCard.reversed.keyword : selectedCard.upright.keyword;
+              const displayAdvice = selectedCard.isReversed ? selectedCard.reversed.advice : selectedCard.upright.advice;
+              
+              setSelections(prev => ({ 
+                  ...prev, 
+                  main: { ...selectedCard, displayDesc, displayKeyword, displayAdvice } 
+              }));
+              setTimeout(() => initPhase('aux'), 500);
+              
+            } else if (drawPhase === 'aux') {
+              setSelections(prev => ({ ...prev, aux: selectedCard }));
+              if (selectedCard.name === '天馬') {
+                setTimeout(() => initPhase('extra', selectedCard.name), 500);
+              } else {
+                setTimeout(() => initPhase('stage'), 500);
+              }
+              
+            } else if (drawPhase === 'extra') {
+              setSelections(prev => ({ ...prev, extraAux: selectedCard }));
+              setTimeout(() => initPhase('stage'), 500);
+              
+            } else if (drawPhase === 'stage') {
+              setSelections(prev => ({ ...prev, stage: selectedCard }));
+              setStep('result');
+              
+              setTimeout(() => {
+                 resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 100);
+            }
+          };
+
+          const reset = () => {
+            setQuestion('');
+            setStep('input');
+            setDrawPhase('main');
+            setSelections({ main: null, aux: null, extraAux: null, stage: null });
+          };
+
+          const getDeepInterpretation = () => {
+            if (!selections.main) return null;
+            const { main, aux, extraAux, stage } = selections;
+
+            const mainChar = main.displayKeyword.split('、')[0];
+            const auxChar = aux.desc.split('。')[0];
+
+            const coreStatus = main.isReversed ? "逆位（暗）" : "正位（亮）";
+            let analysisCore = `針對您詢問的「${question}」，主星【${main.name}】呈現${coreStatus}。`;
+            if(main.isReversed) {
+                analysisCore += `\n⚠️ 這顯示核心能量目前較為低迷或方向錯誤，具體表現為「${main.displayKeyword}」。您的心態或處境可能較為掙扎，或是外在環境不配合。`;
+            } else {
+                analysisCore += `\n✨ 這是一個強而有力的吉兆，核心能量飽滿，具體表現為「${main.displayKeyword}」。您目前掌握了主動權，或是局勢正朝著有利的方向發展。`;
+            }
+
+            let analysisAux = `輔牌【${aux.name}】帶來了「${auxChar}」的影響。${aux.desc}`;
+            if(aux.name === '天馬') {
+                analysisAux = `輔牌出現【天馬】，顯示這件事不會靜止不變，而是處於「奔波變動」的狀態。`;
+            }
+
+            if (extraAux) {
+                analysisAux += ` 此外，由於天馬的牽動，變動之後將會引發【${extraAux.name}】的性質，這意味著事情的結果會傾向於${extraAux.desc}`;
+            }
+
+            let analysisStage = `目前的時運能量處於【${stage.name}】階段。`;
+            analysisStage += `\n⏱️ 時間應期：此牌對應數字為【${stage.num}】。`;
+            analysisStage += `這意味著事情的發生或轉折點可能在 ${stage.num} 天、${stage.num} 週、${stage.num} 個月或 ${stage.num} 年之後（視問題短期或長期而定）。`;
+            analysisStage += `\n📅 特定時段：亦可參考 ${stage.time}。`;
+
+            let synthesis = "";
+            if(main.isReversed) {
+                if(aux.type === 'lucky') {
+                     synthesis = `【險中求穩局】\n您目前的核心狀態傾向「${mainChar}」，顯示內心或局勢上有不穩定的因子。但幸運的是，輔牌「${aux.name}」帶來了「${auxChar}」的能量。這意味著雖然您個人狀態未達巔峰，但外部環境或貴人運極佳。建議您不要強出頭，而是懂得「借力使力」，依賴這股外部助力來度過低潮。`;
+                } else {
+                     synthesis = `【嚴峻考驗局】\n這是一段較為辛苦的時期。主星呈現「${mainChar}」的負面特質，顯示內部能量耗損或方向迷失；而輔牌「${aux.name}」又帶來「${auxChar}」的考驗。這代表內憂外患同時存在。建議您此刻「以靜制動」，先解決內心的矛盾，避免在混亂中做重大決定，保留實力才是上策。`;
+                }
+            } else {
+                if(aux.type === 'lucky') {
+                     synthesis = `【乘風破浪局】\n這是一個絕佳的組合！主星發揮了「${mainChar}」的優勢，能量飽滿且方向正確；加上輔牌「${aux.name}」給予「${auxChar}」的加持。這不僅是運氣好，更是實力與機會的結合。請務必把握當下，大膽執行您的計畫，現在正是「水到渠成」的高光時刻。`;
+                } else {
+                     synthesis = `【披荊斬棘局】\n您本身具備「${mainChar}」的強大能力與優勢，但環境中卻存在「${auxChar}」的干擾（由${aux.name}帶來）。這就像是駕駛跑車行駛在顛簸路面，雖然有能力，但過程難免顛簸。建議您保持耐心，利用主星的優勢去克服輔牌的阻礙，不要因一時的挫折而自我懷疑，最終定能突破重圍。`;
+                }
+            }
+
+            const finalAdvice = `${main.displayAdvice} 同時，${aux.advice}`;
+
+            return {
+                core: analysisCore,
+                aux: analysisAux,
+                stage: analysisStage,
+                synthesis: synthesis,
+                advice: finalAdvice
+            };
+          };
+
+          const resultData = step === 'result' ? getDeepInterpretation() : null;
+
+          return (
+            <div className="min-h-screen bg-purple-50 text-slate-800 font-sans selection:bg-purple-200 relative overflow-x-hidden">
+              <StarryBackground />
+              
+              {toast && (
+                <Toast 
+                  message={toast.message} 
+                  type={toast.type} 
+                  onClose={() => setToast(null)} 
+                />
+              )}
+              
+              <header className="p-4 text-center border-b border-purple-100 bg-white/70 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+                <div className="flex items-center justify-center gap-3">
+                  <Icons.Moon className="text-purple-500 w-5 h-5 animate-pulse" />
+                  <h1 className="text-2xl font-bold tracking-[0.1em] text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+                    小歐 紫靈牌
+                  </h1>
+                  <Icons.Star className="text-purple-500 w-5 h-5 animate-pulse" />
+                </div>
+              </header>
+
+              <main className="relative z-10 max-w-4xl mx-auto p-4 min-h-[85vh] flex flex-col items-center justify-center">
                 
-                <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-100">
-                   <h4 className="text-indigo-800 font-bold text-sm mb-2 flex items-center gap-2">
-                     <Crown size={16} className="text-indigo-600"/> 核心能量定調
-                   </h4>
-                   <p className="text-indigo-900/80 leading-relaxed whitespace-pre-line font-medium">{resultData.core}</p>
-                </div>
+                {step === 'input' && (
+                  <div className="w-full max-w-lg bg-white/80 backdrop-blur-xl p-8 rounded-[2rem] border border-white shadow-2xl animate-fade-in">
+                    <div className="mb-6 text-center">
+                      <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-purple-200 animate-float">
+                        <Icons.MessageCircle size={36} className="text-white" />
+                      </div>
+                      <h2 className="text-xl font-semibold mb-2 text-purple-900">心中的疑惑</h2>
+                      <p className="text-sm text-slate-500">向宇宙發出信號，星辰將為您指引方向</p>
+                    </div>
 
-                <div className="bg-cyan-50 p-5 rounded-xl border border-cyan-100">
-                   <h4 className="text-cyan-800 font-bold text-sm mb-2 flex items-center gap-2">
-                     <Sparkles size={16} className="text-cyan-600"/> 助力與變數
-                   </h4>
-                   <p className="text-cyan-900/80 leading-relaxed font-medium">{resultData.aux}</p>
-                </div>
+                    <div className="mb-6 grid grid-cols-1 gap-4">
+                        <div className="relative">
+                            <Icons.User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-purple-400" size={20} />
+                            <input 
+                              type="text" 
+                              value={name}
+                              onChange={(e) => setName(e.target.value)}
+                              placeholder="您的姓名 / 暱稱"
+                              className="w-full bg-white border border-purple-200 rounded-xl py-3 pl-12 pr-4 text-purple-900 placeholder-purple-300 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                            />
+                        </div>
+                        <div className="relative">
+                            <Icons.Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-purple-400" size={20} />
+                            <input 
+                              type="email" 
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              placeholder="您的 Email"
+                              className="w-full bg-white border border-purple-200 rounded-xl py-3 pl-12 pr-4 text-purple-900 placeholder-purple-300 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                            />
+                        </div>
+                    </div>
 
-                <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                   <h4 className="text-slate-700 font-bold text-sm mb-2 flex items-center gap-2">
-                     <Clock size={16} className="text-slate-600"/> 時間與進程
-                   </h4>
-                   <p className="text-slate-700/80 leading-relaxed whitespace-pre-line font-medium">{resultData.stage}</p>
-                </div>
+                    <div className="mb-6 bg-purple-50 p-5 rounded-xl border border-purple-100 text-slate-600 text-sm leading-relaxed space-y-3 font-light tracking-wide">
+                       <div>
+                         <span className="font-bold text-purple-600 block mb-1">第一步：</span>
+                         找一個安靜的環境坐下來。雙腳放在地面，雙手放到膝蓋上。
+                       </div>
+                       <div>
+                         <span className="font-bold text-purple-600 block mb-1">第二步：</span>
+                         慢慢閉上眼睛，感受腳掌貼服地面，感受肌肉從腳掌一路延伸到大腿、軀幹到頭頂、手腳。並且放鬆這些肌肉。然後慢慢的將手搭在膝蓋上。將注意力放在鼻尖前方。感受一下空氣在這地方隨著你的鼻息進出。觀察呼吸三次。抽牌時想著你心中的疑問。
+                       </div>
+                    </div>
+                    
+                    <textarea 
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      placeholder="請輸入您想詢問的問題..."
+                      className="w-full bg-white border border-purple-200 rounded-2xl p-5 text-purple-900 placeholder-purple-300 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 h-32 resize-none mb-6 transition-all"
+                    />
+                    
+                    <button 
+                      onClick={startDrawing}
+                      disabled={isSubmitting}
+                      className={`group w-full bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-bold py-4 rounded-2xl shadow-lg shadow-purple-200 flex items-center justify-center gap-2 transition-all transform ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02]'}`}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Icons.Loader2 size={20} className="animate-spin" />
+                          <span>資料傳送中...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icons.Send size={20} className="group-hover:translate-x-1 transition-transform"/>
+                          <span className="tracking-widest">送出資料並開始占卜</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
 
-                <div className="p-2">
-                    <h4 className="text-purple-600 font-bold text-lg mb-3 flex items-center gap-2">
-                        <Star size={20} className="fill-purple-600" /> 小歐綜合詳解
-                    </h4>
-                    <p className="text-slate-700 leading-8 text-lg font-light">
-                        {resultData.synthesis}
-                    </p>
-                </div>
+                {step === 'drawing' && (
+                  <div className="w-full flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
+                    <div className="mb-6 text-center">
+                      <span className="px-4 py-1 rounded-full bg-white/60 border border-purple-200 text-purple-800 text-xs tracking-wider mb-4 inline-block backdrop-blur-md shadow-sm">
+                        正在解讀：{question.length > 10 ? question.substring(0,10) + '...' : question}
+                      </span>
+                    </div>
 
-                <div className="mt-4 p-6 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl border border-yellow-200 shadow-sm transform transition hover:scale-[1.01]">
-                    <strong className="text-yellow-700 block mb-2 text-lg flex items-center gap-2">
-                        <Lock size={20} /> 關鍵行動指引
-                    </strong>
-                    <p className="text-yellow-800 font-medium tracking-wide text-lg">
-                        {resultData.advice}
-                    </p>
-                </div>
-              </div>
+                    {drawPhase === 'main' && (
+                      <DrawingDeck 
+                        title="抽取【主星】" 
+                        subtitle="請從 14 張牌中選取一張，代表核心能量"
+                        count={14} 
+                        onCardSelect={handleCardClick}
+                        refreshKey={refreshKey} 
+                      />
+                    )}
+                    {drawPhase === 'aux' && (
+                      <DrawingDeck 
+                        title="抽取【輔牌】" 
+                        subtitle="請從 18 張牌中選取一張，代表助力或阻力"
+                        count={18} 
+                        onCardSelect={handleCardClick}
+                        refreshKey={refreshKey}
+                      />
+                    )}
+                    {drawPhase === 'extra' && (
+                      <DrawingDeck 
+                        title="✨ 天馬星現！" 
+                        subtitle="奔波變動，請再加抽一張"
+                        count={17} 
+                        onCardSelect={handleCardClick}
+                        refreshKey={refreshKey}
+                      />
+                    )}
+                    {drawPhase === 'stage' && (
+                      <DrawingDeck 
+                        title="抽取【十二長生】" 
+                        subtitle="請從 12 張牌中選取一張，代表時間運勢"
+                        count={12} 
+                        onCardSelect={handleCardClick}
+                        refreshKey={refreshKey}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {step === 'result' && selections.main && resultData && (
+                  <div ref={resultsRef} className="w-full flex flex-col items-center animate-fade-in-up pb-12">
+                    
+                    <div className="mb-10 text-center">
+                      <h3 className="text-purple-400 text-xs font-bold tracking-widest uppercase mb-2">Your Question</h3>
+                      <p className="relative text-xl sm:text-2xl font-serif text-purple-900 px-8 py-2 border-b border-purple-200 inline-block">
+                        "{question}"
+                      </p>
+                    </div>
+
+                    {/* 牌陣展示區 */}
+                    <div className="flex flex-wrap justify-center items-start gap-4 mb-12">
+                      {/* 1. Main Star */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-yellow-600 text-xs mb-2 font-bold tracking-widest">主星</span>
+                        <Card 
+                          title={selections.main.name}
+                          subtitle={selections.main.element}
+                          desc={selections.main.displayDesc}
+                          shortDesc={selections.main.keyword} 
+                          type="main"
+                          id={selections.main.id}
+                          isReversed={selections.main.isReversed}
+                          isRevealed={true}
+                          delay={100}
+                          colorClass="border-yellow-400"
+                        />
+                      </div>
+
+                      {/* 2. Aux Star */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-cyan-600 text-xs mb-2 font-bold tracking-widest">輔牌</span>
+                        <div className="flex gap-2">
+                            <Card 
+                              title={selections.aux.name}
+                              subtitle={selections.aux.type === 'lucky' ? '吉' : selections.aux.type === 'unlucky' ? '凶' : '特'}
+                              desc={selections.aux.desc}
+                              shortDesc={selections.aux.keyword}
+                              type="aux"
+                              id={selections.aux.id}
+                              isRevealed={true}
+                              delay={400}
+                              colorClass={selections.aux.type === 'lucky' ? 'border-green-400' : selections.aux.type === 'unlucky' ? 'border-red-400' : 'border-blue-400'}
+                            />
+                            {selections.extraAux && (
+                                <Card 
+                                  title={selections.extraAux.name}
+                                  subtitle="變動"
+                                  desc={selections.extraAux.desc}
+                                  shortDesc={selections.extraAux.keyword}
+                                  type="aux"
+                                  id={selections.extraAux.id}
+                                  isRevealed={true}
+                                  delay={800}
+                                  colorClass="border-blue-400"
+                                  extraInfo="天馬"
+                                />
+                            )}
+                        </div>
+                      </div>
+
+                      {/* 3. Stage Card */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-gray-500 text-xs mb-2 font-bold tracking-widest">時運</span>
+                        <Card 
+                          title={selections.stage.name}
+                          subtitle={selections.stage.num}
+                          desc={selections.stage.desc}
+                          shortDesc={selections.stage.keyword}
+                          type="stage"
+                          isRevealed={true}
+                          delay={selections.extraAux ? 1200 : 800}
+                          colorClass="border-gray-400"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* 新增：牌意詳解表格 */}
+                    <div className="w-full max-w-3xl mb-8 bg-white/60 rounded-xl overflow-hidden border border-purple-200 shadow-md animate-fade-in-up">
+                        <div className="bg-purple-100/50 px-4 py-2 flex items-center gap-2 border-b border-purple-200">
+                            <Icons.FileText size={16} className="text-purple-600" />
+                            <span className="text-sm font-bold text-purple-800">牌面一覽表</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left text-slate-700">
+                                <thead className="text-xs text-slate-500 uppercase bg-purple-50/50">
+                                    <tr>
+                                        <th className="px-4 py-3">牌名</th>
+                                        <th className="px-4 py-3">狀態</th>
+                                        <th className="px-4 py-3">核心含義</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-purple-100">
+                                    <tr className="bg-white">
+                                        <td className="px-4 py-3 font-medium text-purple-900">{selections.main.name}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${selections.main.isReversed ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}`}>
+                                                {selections.main.isReversed ? '逆位 (暗)' : '正位 (亮)'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600">{selections.main.displayDesc}</td>
+                                    </tr>
+                                    <tr className="bg-purple-50/30">
+                                        <td className="px-4 py-3 font-medium text-cyan-900">{selections.aux.name}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${selections.aux.type === 'lucky' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                {selections.aux.type === 'lucky' ? '吉星' : '煞星'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600">{selections.aux.desc}</td>
+                                    </tr>
+                                    {selections.extraAux && (
+                                        <tr className="bg-blue-50/30">
+                                            <td className="px-4 py-3 font-medium text-blue-900">{selections.extraAux.name} (天馬加抽)</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${selections.extraAux.type === 'lucky' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                    {selections.extraAux.type === 'lucky' ? '吉星' : '煞星'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600">{selections.extraAux.desc}</td>
+                                        </tr>
+                                    )}
+                                    <tr className="bg-white">
+                                        <td className="px-4 py-3 font-medium text-slate-900">{selections.stage.name}</td>
+                                        <td className="px-4 py-3">
+                                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-200 text-slate-700">
+                                                時運
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600">{selections.stage.desc}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* 深度分析報告 */}
+                    <div className="w-full max-w-3xl bg-white/80 backdrop-blur-xl rounded-3xl p-8 border border-white shadow-2xl space-y-6 relative overflow-hidden">
+                      {/* 裝飾背景 */}
+                      <div className="absolute top-0 right-0 w-40 h-40 bg-purple-200/30 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                      
+                      <div className="flex items-center gap-3 pb-4 border-b border-purple-100 relative z-10">
+                        <Icons.BookOpen className="text-purple-500" />
+                        <h3 className="text-2xl font-bold text-purple-900">小歐為 [{name}] 的專屬紫靈星語</h3>
+                      </div>
+
+                      <div className="space-y-6 relative z-10">
+                        
+                        <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-100">
+                            <h4 className="text-indigo-800 font-bold text-sm mb-2 flex items-center gap-2">
+                              <Icons.Crown size={16} className="text-indigo-600"/> 核心能量定調
+                            </h4>
+                            <p className="text-indigo-900/80 leading-relaxed whitespace-pre-line font-medium">{resultData.core}</p>
+                        </div>
+
+                        <div className="bg-cyan-50 p-5 rounded-xl border border-cyan-100">
+                            <h4 className="text-cyan-800 font-bold text-sm mb-2 flex items-center gap-2">
+                              <Icons.Sparkles size={16} className="text-cyan-600"/> 助力與變數
+                            </h4>
+                            <p className="text-cyan-900/80 leading-relaxed font-medium">{resultData.aux}</p>
+                        </div>
+
+                        <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                            <h4 className="text-slate-700 font-bold text-sm mb-2 flex items-center gap-2">
+                              <Icons.Clock size={16} className="text-slate-600"/> 時間與進程
+                            </h4>
+                            <p className="text-slate-700/80 leading-relaxed whitespace-pre-line font-medium">{resultData.stage}</p>
+                        </div>
+
+                        <div className="p-2">
+                            <h4 className="text-purple-600 font-bold text-lg mb-3 flex items-center gap-2">
+                                <Icons.Star size={20} className="fill-purple-600" /> 小歐綜合詳解
+                            </h4>
+                            <p className="text-slate-700 leading-8 text-lg font-light">
+                                {resultData.synthesis}
+                            </p>
+                        </div>
+
+                        <div className="mt-4 p-6 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl border border-yellow-200 shadow-sm transform transition hover:scale-[1.01]">
+                            <strong className="text-yellow-700 block mb-2 text-lg flex items-center gap-2">
+                                <Icons.Lock size={20} /> 關鍵行動指引
+                            </strong>
+                            <p className="text-yellow-800 font-medium tracking-wide text-lg">
+                                {resultData.advice}
+                            </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8">
+                        <button 
+                          onClick={reset}
+                          className="px-8 py-3 rounded-full bg-white hover:bg-purple-50 border border-purple-200 text-purple-700 transition-all flex items-center gap-2 hover:scale-105 shadow-sm"
+                        >
+                          <Icons.RefreshCw size={18} />
+                          <span>再次占卜</span>
+                        </button>
+                    </div>
+
+                  </div>
+                )}
+              </main>
+
+              <style>{`
+                .perspective-1000 { perspective: 1000px; }
+                .transform-style-3d { transform-style: preserve-3d; }
+                .backface-hidden { backface-visibility: hidden; }
+                .rotate-y-180 { transform: rotateY(180deg); }
+                
+                @keyframes twinkle {
+                    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+                    50% { opacity: 1; transform: scale(1.2); }
+                }
+                .animate-twinkle { animation: twinkle 3s infinite ease-in-out; }
+                
+                @keyframes float {
+                    0%, 100% { transform: translateY(0px); }
+                    50% { transform: translateY(-10px); }
+                }
+                .animate-float { animation: float 6s ease-in-out infinite; }
+
+                @keyframes spin-slow {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+
+                .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+                .animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
+                .animate-fade-in-down { animation: fadeInDown 0.5s ease-out forwards; }
+                
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+                
+                .double-border {
+                  box-shadow: 
+                    0 0 0 4px rgba(255,255,255,0.2),
+                    0 0 0 8px rgba(139, 92, 246, 0.1);
+                }
+              `}</style>
             </div>
+          );
+        };
 
-            <div className="mt-8">
-                <button 
-                  onClick={reset}
-                  className="px-8 py-3 rounded-full bg-white hover:bg-purple-50 border border-purple-200 text-purple-700 transition-all flex items-center gap-2 hover:scale-105 shadow-sm"
-                >
-                  <RefreshCw size={18} />
-                  <span>再次占卜</span>
-                </button>
-            </div>
-
-          </div>
-        )}
-      </main>
-
-      <style>{`
-        .perspective-1000 { perspective: 1000px; }
-        .transform-style-3d { transform-style: preserve-3d; }
-        .backface-hidden { backface-visibility: hidden; }
-        .rotate-y-180 { transform: rotateY(180deg); }
-        
-        @keyframes twinkle {
-            0%, 100% { opacity: 0.3; transform: scale(0.8); }
-            50% { opacity: 1; transform: scale(1.2); }
-        }
-        .animate-twinkle { animation: twinkle 3s infinite ease-in-out; }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-        }
-        .animate-float { animation: float 6s ease-in-out infinite; }
-
-        @keyframes spin-slow {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
-
-        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
-        .animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
-        
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        
-        .double-border {
-          box-shadow: 
-            0 0 0 4px rgba(255,255,255,0.2),
-            0 0 0 8px rgba(139, 92, 246, 0.1);
-        }
-      `}</style>
-    </div>
-  );
-};
-
-export default App;
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
